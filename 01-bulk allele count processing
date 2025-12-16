@@ -1,7 +1,8 @@
 
 ### Load data
 
-dart_file <- "/mnt/data/wright/home/u8021786/honeybee_genetics/data/Report_DApi25-11074_SNPcount_2.csv"
+dart_file <- "data/Report_DApi25-11074_SNPcount_2.csv"
+
 
 # Skip first 6 rows (DArT metadata)
 dart <- read.csv(dart_file, header = TRUE, skip = 6, stringsAsFactors = FALSE)
