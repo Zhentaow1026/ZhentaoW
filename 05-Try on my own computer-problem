@@ -1,0 +1,7 @@
+scp u8021786@wright:/mnt/data/wright/home/u8021786/honeybee_genetics/scripts/Batlow_jointSFS_unfolded.txt .
+
+scp u8021786@wright:/mnt/data/wright/home/u8021786/honeybee_genetics/scripts/batlow_moments_infer.py .
+
+
+conda activate bee_moments
+python batlow_moments_infer.py

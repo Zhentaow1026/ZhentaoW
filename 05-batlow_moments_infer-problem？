@@ -1,0 +1,47 @@
+import numpy as np
+import moments
+from moments import Demographics2D, Inference, Plotting, Misc
+import matplotlib.pyplot as plt
+
+# 1. load joint SFS (unfolded) ---fold (no outgroup)
+fs = moments.Spectrum(np.loadtxt("Batlow_jointSFS_unfolded.txt"))
+fs.pop_ids = ["BatlowFeral", "BatlowManaged"]
+data = fs.fold()
+ns = data.sample_sizes
+print("sample sizes:", ns)
+
+# 2. model
+# params = (nuF, nuM, T, m)
+def model_func(params, ns):
+    nuF, nuM, T, m = params
+    return Demographics2D.split_mig((nuF, nuM, T, m), ns).fold()
+
+# 3. fit
+p0 = [1.0, 1.0, 0.5, 1.0]
+lb = [0.01, 0.01, 0.001, 0.0]
+ub = [10.0, 10.0, 5.0, 10.0]
+
+p0 = Misc.perturb_params(p0, fold=1, lower_bound=lb, upper_bound=ub)
+popt = Inference.optimize_log(p0, data, model_func, ns,
+                              lower_bound=lb, upper_bound=ub,
+                              maxiter=100, verbose=1)
+
+print("best params (nuF, nuM, T, m):", popt)
+
+model = model_func(popt, ns)
+
+# 4. plots
+Plotting.plot_single_2d_sfs(data, vmin=1)
+plt.title("Observed folded SFS")
+plt.savefig("Batlow_obs.png", dpi=300)
+plt.clf()
+
+Plotting.plot_single_2d_sfs(model, vmin=1)
+plt.title("Model (split + symmetric migration)")
+plt.savefig("Batlow_model.png", dpi=300)
+plt.clf()
+
+Plotting.plot_2d_comp_multinom(model, data, vmin=-3, vmax=3)
+plt.title("Residuals")
+plt.savefig("Batlow_residuals.png", dpi=300)
+plt.clf()

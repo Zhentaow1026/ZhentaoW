@@ -1,0 +1,24 @@
+import numpy as np
+import moments
+from moments import Plotting
+import matplotlib.pyplot as plt
+
+# 1. read 2D joint SFS（unfolded）
+fs_array = np.loadtxt("Batlow_jointSFS_unfolded.txt")
+
+# 2. set sample sizes
+sample_sizes = [fs_array.shape[0] - 1, fs_array.shape[1] - 1]
+
+# 3. to spectrum folded
+fs = moments.Spectrum(fs_array,
+                      pop_ids=["BatlowFeral", "BatlowManaged"],
+                      sample_sizes=sample_sizes,
+                      folded=False)
+
+# 4. do not have outgroup
+fs_fold = fs.fold()
+
+# 5. 
+Plotting.plot_single_2d_sfs(fs_fold, vmin=1)
+plt.title("Folded SFS: BatlowFeral vs BatlowManaged")
+plt.savefig("BatlowFeral_BatlowManaged_foldedSFS.png", dpi=300)

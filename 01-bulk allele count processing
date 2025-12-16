@@ -1,0 +1,108 @@
+
+### Load data
+
+dart_file <- "/mnt/data/wright/home/u8021786/honeybee_genetics/data/Report_DApi25-11074_SNPcount_2.csv"
+
+# Skip first 6 rows (DArT metadata)
+dart <- read.csv(dart_file, header = TRUE, skip = 6, stringsAsFactors = FALSE)
+
+### Identify metadata and sample columns
+
+meta_cols <- c(
+  "AlleleID", "CloneID", "AlleleSequence", "TrimmedSequence",
+  "Chrom_HoneyBee_ApisMellifera_v31",
+  "ChromPosTag_HoneyBee_ApisMellifera_v31",
+  "ChromPosSnp_HoneyBee_ApisMellifera_v31",
+  "AlnCnt_HoneyBee_ApisMellifera_v31",
+  "AlnEvalue_HoneyBee_ApisMellifera_v31",
+  "Strand_HoneyBee_ApisMellifera_v31",
+  "SNP", "SnpPosition", "CallRate",
+  "OneRatioRef", "OneRatioSnp",
+  "FreqHomRef", "FreqHomSnp", "FreqHets",
+  "PICRef", "PICSnp", "AvgPIC",
+  "AvgCountRef", "AvgCountSnp", "RepAvg"
+)
+
+sample_cols <- setdiff(names(dart), meta_cols)
+
+### ============
+### Remove samples (BatlowBF12 + BatlowBF1 + all replicates)
+### ============
+
+remove_patterns <- c("BatlowBF12", "BatlowBF1")
+remove_cols <- grep(paste(remove_patterns, collapse = "|"), sample_cols, value = TRUE)
+
+cat("Removing problematic sample columns:\n")
+print(remove_cols)
+
+sample_cols_clean <- setdiff(sample_cols, remove_cols)
+
+
+### Define bulk sample sets
+
+bulk_cols <- grep("BF|BM", sample_cols_clean, value = TRUE)
+
+# Separate by region × feral/managed
+young_bf <- grep("^YoungBF", bulk_cols, value = TRUE)
+young_bm <- grep("^YoungBM", bulk_cols, value = TRUE)
+batlow_bf <- grep("^BatlowBF", bulk_cols, value = TRUE)
+batlow_bm <- grep("^BatlowBM", bulk_cols, value = TRUE)
+
+cat("\nBulk sample groups:\n")
+print(list(
+  YoungBF = young_bf,
+  YoungBM = young_bm,
+  BatlowBF = batlow_bf,
+  BatlowBM = batlow_bm
+))
+
+
+### Pair Ref / SNP rows
+
+n_row <- nrow(dart)
+stopifnot(n_row %% 2 == 0)
+
+idx_ref <- seq(1, n_row, by = 2)
+idx_alt <- seq(2, n_row, by = 2)
+
+# check
+stopifnot(all(dart$CloneID[idx_ref] == dart$CloneID[idx_alt]))
+
+### ============
+### compute ref/alt counts for a population
+### ============
+
+make_pop_counts <- function(pop_cols) {
+  if (length(pop_cols) == 0) {
+    return(data.frame(ref = rep(NA, length(idx_ref)),
+                      alt = rep(NA, length(idx_ref)),
+                      depth = rep(NA, length(idx_ref))))
+  }
+  ref_counts <- rowSums(dart[idx_ref, pop_cols, drop = FALSE], na.rm = TRUE)
+  alt_counts <- rowSums(dart[idx_alt, pop_cols, drop = FALSE], na.rm = TRUE)
+
+  return(data.frame(
+    ref = ref_counts,
+    alt = alt_counts,
+    depth = ref_counts + alt_counts
+  ))
+}
+
+### ============
+### Compute counts for each population
+### ============
+cnt_YF <- make_pop_counts(young_bf)   # Young feral
+cnt_YM <- make_pop_counts(young_bm)   # Young managed
+cnt_BF <- make_pop_counts(batlow_bf)  # Batlow feral
+cnt_BM <- make_pop_counts(batlow_bm)  # Batlow managed
+
+### ============
+### Save results
+### ============
+write.csv(cnt_YF, "YoungFeral_counts.csv", row.names = FALSE)
+write.csv(cnt_YM, "YoungManaged_counts.csv", row.names = FALSE)
+write.csv(cnt_BF, "BatlowFeral_counts.csv", row.names = FALSE)
+write.csv(cnt_BM, "BatlowManaged_counts.csv", row.names = FALSE)
+
+cat("\nAll population count tables written to:\n")
+cat("YoungFeral_counts.csv\nYoungManaged_counts.csv\nBatlowFeral_counts.csv\nBatlowManaged_counts.csv\n")

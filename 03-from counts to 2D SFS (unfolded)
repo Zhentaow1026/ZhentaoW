@@ -1,0 +1,31 @@
+# 
+BF <- read.csv("BatlowFeral_counts.csv")
+BM <- read.csv("BatlowManaged_counts.csv")
+
+# p = alt / depth
+p1 <- BF$alt / BF$depth   # BatlowFeral
+p2 <- BM$alt / BM$depth   # BatlowManaged
+
+# 
+ok <- is.finite(p1) & is.finite(p2)
+p1 <- p1[ok]
+p2 <- p2[ok]
+
+# n=200
+n1 <- 200
+n2 <- 200
+
+# 
+set.seed(123)
+k1 <- rbinom(length(p1), size = n1, prob = p1)
+k2 <- rbinom(length(p2), size = n2, prob = p2)
+
+# 2D joint SFS，SFS[i+1, j+1] = SNP count
+SFS <- matrix(0, nrow = n1 + 1, ncol = n2 + 1)
+for (i in seq_along(k1)) {
+  SFS[k1[i] + 1, k2[i] + 1] <- SFS[k1[i] + 1, k2[i] + 1] + 1
+}
+
+# save SFS to file
+write.table(SFS, file = "Batlow_jointSFS_unfolded.txt",
+            row.names = FALSE, col.names = FALSE)
