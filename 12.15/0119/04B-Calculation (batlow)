@@ -1,0 +1,62 @@
+# Check how many pools are there in the sync section
+
+sync_file <- "/mnt/data/wright/home/u8021786/popoolation2_project/sync/batlow_all_excl1_12.sync"
+
+x <- readLines(sync_file, n = 1)
+n_fields <- length(strsplit(x, "\t")[[1]])
+n_pools <- n_fields - 3 
+n_fields
+n_pools
+
+# n_fields = 27; n_pools = 24
+
+# poolsizes
+poolsizes <- rep(20, n_pools)
+
+#check pool sizes (first 5)
+length(poolsizes)  #24
+poolsizes[1:5]
+
+# read pooldata
+pooldata <- popsync2pooldata(sync.file = sync_file, poolsizes = poolsizes)
+
+# Calculate pairwise FST
+fst_matrix <- compute.pairwiseFST(pooldata)
+
+# export FST
+fst <- fst_matrix@PairwiseFSTmatrix
+
+linear_fst <- fst / (1 - fst)
+
+dist_obj <- as.dist(linear_fst)
+
+# check euclidean
+library(ade4)
+is.euclid(dist_obj)
+
+# result: TRUE
+dist_eucl <- dist_obj
+
+#create metadata
+n_pools <- nrow(fst)
+
+metadata <- data.frame(
+  pool   = rownames(fst), 
+  region = rep("Batlow", n_pools), 
+  feral  = factor(c(rep("feral", 12), rep("managed", 12)))
+)
+
+metadata
+table(metadata$feral) #12 #12
+
+library(vegan)
+adonis2(dist_eucl ~ feral,
++         data = metadata,
++         permutations = 999,
++         by = "margin")
+
+adonis2(
+  dist_eucl ~ feral,
+  data = metadata,
+  permutations = 999
+)

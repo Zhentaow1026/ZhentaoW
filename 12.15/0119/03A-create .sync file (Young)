@@ -1,0 +1,79 @@
+# location
+cd /mnt/data/wright/home/u8021786/popoolation2_project
+
+cat > make_sync_young_all.sbatch << 'EOF'
+#!/bin/bash
+#SBATCH --job-name=young_sync
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_young_sync.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_young_sync.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+MAPDIR=$BASE/map
+OUTDIR=$BASE/sync
+
+SCRATCH=/mnt/data/wright/home/scratch/u8021786/young_sync_$SLURM_JOB_ID
+mkdir -p "$SCRATCH" "$OUTDIR"
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate /mnt/data/wright/home/u8021786/.conda/envs/popoolation2
+
+# Define P2JAR
+P2JAR="$CONDA_PREFIX/share/popoolation2-1.201-0/mpileup2sync.jar"
+
+# build BAM lists
+BAMS=(
+  $MAPDIR/young_feral/YoungBF1.bam
+  $MAPDIR/young_feral/YoungBF2.bam
+  $MAPDIR/young_feral/YoungBF3.bam
+  $MAPDIR/young_feral/YoungBF4.bam
+  $MAPDIR/young_feral/YoungBF5.bam
+  $MAPDIR/young_feral/YoungBF6.bam
+  $MAPDIR/young_feral/YoungBF7.bam
+  $MAPDIR/young_feral/YoungBF8.bam
+  $MAPDIR/young_feral/YoungBF9.bam
+  $MAPDIR/young_feral/YoungBF10.bam
+  $MAPDIR/young_managed/YoungBM1.bam
+  $MAPDIR/young_managed/YoungBM2.bam
+  $MAPDIR/young_managed/YoungBM3.bam
+  $MAPDIR/young_managed/YoungBM4.bam
+  $MAPDIR/young_managed/YoungBM5.bam
+  $MAPDIR/young_managed/YoungBM6.bam
+  $MAPDIR/young_managed/YoungBM7.bam
+  $MAPDIR/young_managed/YoungBM8.bam
+  $MAPDIR/young_managed/YoungBM9.bam
+  $MAPDIR/young_managed/YoungBM10.bam
+)
+
+# check
+for b in "${BAMS[@]}"; do
+  [[ -f "$b" ]] || { echo "Missing BAM: $b" >&2; exit 1; }
+  [[ -f "${b}.bai" ]] || { echo "Missing BAI: ${b}.bai" >&2; exit 1; }
+done
+
+# create mpileup
+samtools mpileup -B -f "$REF" "${BAMS[@]}" > "$SCRATCH/young_all.mpileup"
+
+# mpileup → sync
+java -ea -Xmx28g -jar "$P2JAR" \
+  --input  "$SCRATCH/young_all.mpileup" \
+  --output "$SCRATCH/young_all.sync" \
+  --fastq-type sanger \
+  --min-qual 20 \
+  --threads "$SLURM_CPUS_PER_TASK"
+
+# move location and remove
+mv "$SCRATCH/young_all.sync" "$OUTDIR/"
+rm -rf "$SCRATCH"
+
+echo "DONE: $OUTDIR/young_all.sync"
+EOF
+
+# create <make_sync_young_all.sbatch>
+# create <young_all.sync>

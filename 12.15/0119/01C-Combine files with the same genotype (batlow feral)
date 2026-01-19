@@ -1,0 +1,52 @@
+# batlow_feral_map.tsv (ID + genotype)
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+mkdir -p $BASE/meta
+
+cat > $BASE/meta/batlow_feral_map.tsv <<'EOF'
+4675554	BatlowBF5
+4675555	BatlowBF13
+4675566	BatlowBF6
+4675567	BatlowBF14
+4675578	BatlowBF7
+4675590	BatlowBF8
+4675601	BatlowBF1
+4675602	BatlowBF9
+4675613	BatlowBF2
+4675614	BatlowBF10
+4675625	BatlowBF3
+4675626	BatlowBF11
+4675637	BatlowBF4
+4675638	BatlowBF12
+4675661	BatlowBF1
+4675664	BatlowBF2
+4675667	BatlowBF3
+4675670	BatlowBF4
+EOF
+
+# results=14
+cut -f2 $BASE/meta/batlow_feral_map.tsv | sort -u > $BASE/meta/batlow_feral_genotypes.txt
+wc -l $BASE/meta/batlow_feral_genotypes.txt
+cat $BASE/meta/batlow_feral_genotypes.txt
+
+# combine files with the same genotype
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+FASTQDIR=/mnt/data/wright/home/u8021786/dart_all
+OUT=$BASE/fastq_by_genotype/batlow_feral
+
+mkdir -p "$OUT"
+
+while read -r GENO; do
+  echo "Merging $GENO ..."
+  ids=$(awk -v g="$GENO" '$2==g{print $1}' $BASE/meta/batlow_feral_map.tsv)
+
+  # combine them
+  cat $(for id in $ids; do echo "$FASTQDIR/${id}.FASTQ.gz"; done) > "$OUT/${GENO}.FASTQ.gz"
+
+  # check gzip
+  gzip -t "$OUT/${GENO}.FASTQ.gz"
+
+done < $BASE/meta/batlow_feral_genotypes.txt
+
+# check
+ls -lh $BASE/fastq_by_genotype/batlow_feral | head

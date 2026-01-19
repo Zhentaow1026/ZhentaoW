@@ -1,0 +1,36 @@
+cat > $BASE/map_young_feral_array.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=YF_map
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=16G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%A_%a_%x.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%A_%a_%x.err
+#SBATCH --array=1-10
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+IN_DIR=$BASE/fastq_by_genotype/young_feral
+OUT_DIR=$BASE/map/young_feral
+
+# conda env
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+mkdir -p "$OUT_DIR"
+
+# array job
+GENO=$(sed -n "${SLURM_ARRAY_TASK_ID}p" $BASE/meta/young_feral_genotypes.txt)
+FQ=$IN_DIR/${GENO}.FASTQ.gz
+
+# tutorial
+bwa aln -n 0.01 -l 100 -o 1 -d 12 -e 12 -t ${SLURM_CPUS_PER_TASK} "$REF" "$FQ" > "$OUT_DIR/${GENO}.sai"
+bwa samse "$REF" "$OUT_DIR/${GENO}.sai" "$FQ" > "$OUT_DIR/${GENO}.sam"
+
+# tutorial
+samtools view -q 20 -bS "$OUT_DIR/${GENO}.sam" | samtools sort -o "$OUT_DIR/${GENO}.bam"
+samtools index "$OUT_DIR/${GENO}.bam"
+
+echo "DONE: $GENO"
+EOF

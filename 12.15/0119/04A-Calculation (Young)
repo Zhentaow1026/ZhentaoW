@@ -1,0 +1,58 @@
+# Check how many pools are there in the sync section
+
+sync_file <- "/mnt/data/wright/home/u8021786/popoolation2_project/sync/young_all.sync"
+
+x <- readLines(sync_file, n = 1)
+n_fields <- length(strsplit(x, "\t")[[1]])
+n_pools <- n_fields - 3
+n_fields
+n_pools
+
+# n_fields = 23; n_pools = 20
+
+# poolsizes
+poolsizes <- rep(20, n_pools)
+
+#check pool sizes (first 5)
+length(poolsizes)
+poolsizes[1:5]
+
+# read pooldata
+pooldata <- popsync2pooldata(sync.file = sync_file, poolsizes = poolsizes)
+
+# Calculate pairwise FST
+fst_matrix <- compute.pairwiseFST(pooldata)
+
+# export FST
+fst <- fst_matrix@PairwiseFSTmatrix
+
+linear_fst <- fst / (1 - fst)
+
+dist_obj <- as.dist(linear_fst)
+
+# check euclidean
+library(ade4)
+is.euclid(dist_obj)
+
+# result: FALSE
+dist_eucl <- cailliez(dist_obj)
+
+#create metadata
+n_pools <- nrow(fst)  # 20
+
+metadata <- data.frame(
+  pool   = rownames(fst),
+  region = rep("Young", n_pools),
+  feral  = factor(c(rep("feral", 10), rep("managed", 10)))
+)
+
+metadata
+table(metadata$feral)
+
+library(vegan)
+#adonis2
+adonis2(
+  dist_eucl ~ feral,
+  data = metadata,
+  permutations = 999
+)

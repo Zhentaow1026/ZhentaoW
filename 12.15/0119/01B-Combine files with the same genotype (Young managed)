@@ -1,0 +1,54 @@
+# young_managed_map.tsv (ID + genotype)
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+mkdir -p $BASE/meta
+
+cat > $BASE/meta/young_managed_map.tsv <<'EOF'
+4675553	YoungBM7
+4675565	YoungBM8
+4675576	YoungBM1
+4675577	YoungBM9
+4675588	YoungBM2
+4675589	YoungBM10
+4675600	YoungBM3
+4675612	YoungBM4
+4675624	YoungBM5
+4675636	YoungBM6
+4675648	YoungBM7
+4675652	YoungBM8
+4675654	YoungBM1
+4675655	YoungBM9
+4675657	YoungBM2
+4675658	YoungBM10
+4675660	YoungBM3
+4675663	YoungBM4
+4675666	YoungBM5
+4675669	YoungBM6
+EOF
+
+# results=10
+cut -f2 $BASE/meta/young_managed_map.tsv | sort -u > $BASE/meta/young_managed_genotypes.txt
+wc -l $BASE/meta/young_managed_genotypes.txt
+cat $BASE/meta/young_managed_genotypes.txt
+
+# combine files with the same genotype
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+FASTQDIR=/mnt/data/wright/home/u8021786/dart_all
+OUT=$BASE/fastq_by_genotype/young_managed
+
+mkdir -p "$OUT"
+
+while read -r GENO; do
+  echo "Merging $GENO ..."
+  ids=$(awk -v g="$GENO" '$2==g{print $1}' $BASE/meta/young_managed_map.tsv)
+
+  # combine them
+  cat $(for id in $ids; do echo "$FASTQDIR/${id}.FASTQ.gz"; done) > "$OUT/${GENO}.FASTQ.gz"
+
+  # check gzip
+  gzip -t "$OUT/${GENO}.FASTQ.gz"
+
+done < $BASE/meta/young_managed_genotypes.txt
+
+# check
+ls -lh $BASE/fastq_by_genotype/young_managed | head
