@@ -1,0 +1,145 @@
+# combined Young and Batlow
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+cat $BASE/meta/young_all_bams_order.txt \
+    $BASE/meta/batlow_all_bams_order_excl1_12.txt \
+  > $BASE/meta/all_regions_bams_order.txt
+
+# check
+wc -l $BASE/meta/all_regions_bams_order.txt
+head -n 3 $BASE/meta/all_regions_bams_order.txt
+tail -n 3 $BASE/meta/all_regions_bams_order.txt
+
+# create all_regions.sync
+cat > $BASE/make_sync_all_regions.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=all_sync
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_all_sync.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_all_sync.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+BAMLIST=$BASE/meta/all_regions_bams_order.txt
+OUTDIR=$BASE/sync
+
+SCR=/mnt/data/wright/home/scratch/u8021786/all_sync_${SLURM_JOB_ID}
+mkdir -p "$SCR" "$OUTDIR"
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+P2JAR="$CONDA_PREFIX/share/popoolation2-1.201-0/mpileup2sync.jar"
+
+# check bams + bai exist
+while read -r b; do
+  [[ -f "$b" ]] || { echo "Missing BAM: $b" >&2; exit 1; }
+  [[ -f "${b}.bai" ]] || { echo "Missing BAI: ${b}.bai" >&2; exit 1; }
+done < "$BAMLIST"
+
+# mpileup
+samtools mpileup -B -f "$REF" $(cat "$BAMLIST") > "$SCR/all_regions.mpileup"
+
+# sync
+java -ea -Xmx28g -jar "$P2JAR" \
+  --input "$SCR/all_regions.mpileup" \
+  --output "$SCR/all_regions.sync" \
+  --fastq-type sanger \
+  --min-qual 20 \
+  --threads "${SLURM_CPUS_PER_TASK}"
+
+cp -av "$SCR/all_regions.sync" "$OUTDIR/all_regions.sync"
+echo "DONE: $OUTDIR/all_regions.sync"
+EOF
+
+sbatch $BASE/make_sync_all_regions.sbatch
+
+# got all_regions.sync
+
+library(poolfstat)
+sync_file <- "/mnt/data/wright/home/u8021786/popoolation2_project/sync/all_regions.sync"
+
+# # Infer the number of pools by reading the first line
+first_line <- readLines(sync_file, n = 1)
+n_cols <- length(strsplit(first_line, "\t")[[1]])
+n_pools <- n_cols - 3
+
+cat("n_pools =", n_pools, "\n")
+
+# poolsizes
+n_ind <- 10
+poolsizes <- rep(2 * n_ind, n_pools)
+
+pooldata <- popsync2pooldata(sync.file = sync_file, poolsizes = poolsizes)
+
+fst_matrix <- compute.pairwiseFST(pooldata)
+fst <- fst_matrix@PairwiseFSTmatrix
+
+linear_fst <- fst / (1 - fst)
+
+dist_obj <- as.dist(linear_fst)
+
+# check euclidean
+library(ade4)
+is.euclid(dist_obj)
+
+# result: FALSE
+dist_eucl <- cailliez(dist_obj)
+
+#create metadata
+sample_names <- rownames(fst)
+
+metadata <- data.frame(
+  sample = sample_names,
+  region = ifelse(grepl("^Young", sample_names), "Young", "Batlow"),
+  feral  = ifelse(grepl("BF", sample_names), "feral", "managed"),
+  stringsAsFactors = FALSE
+)
+
+metadata$region <- factor(metadata$region)
+metadata$feral  <- factor(metadata$feral)
+
+table(metadata$region, metadata$feral)
+head(metadata)
+
+#adonis2
+library(vegan)
+adonis2(
+  dist_eucl ~ region * feral,
+  data = metadata,
+  permutations = 999,
+  by = "margin"
+)
+
+#question? have negative value-Error in adonis0(formula, data = data, method = method) :
+  # dissimilarities must be non-negative
+
+#1
+range(fst, na.rm = TRUE)
+linear_fst <- fst / (1 - fst)
+range(linear_fst, na.rm = TRUE)
+
+#2
+fst2 <- fst
+fst2[fst2 < 0] <- 0
+diag(fst2) <- 0
+
+#3
+linear_fst <- fst2 / (1 - fst2)
+diag(linear_fst) <- 0
+dist_obj <- as.dist(linear_fst)
+
+#4
+min(dist_eucl)
+
+#5 still have negative value
+d <- as.matrix(dist_eucl)
+d[d < 0] <- 0
+dist_eucl <- as.dist(d)
+
+#6 run again adonis2
