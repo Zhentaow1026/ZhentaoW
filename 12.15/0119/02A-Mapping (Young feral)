@@ -3,7 +3,7 @@ mkdir -p $SCR/work/young_feral
 mkdir -p $SCR/map/young_feral
 mkdir -p $BASE/map/young_feral
 
-cat > $BASE/map_young_managed_array.sbatch <<'EOF'
+cat > $BASE/map_young_feral_array.sbatch <<'EOF'
 #!/bin/bash
 #SBATCH --job-name=YF_map
 #SBATCH --partition=Standard

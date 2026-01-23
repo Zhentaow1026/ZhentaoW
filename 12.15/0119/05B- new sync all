@@ -1,0 +1,269 @@
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+
+#create batlow_all_bams_order_exclBF1_BF12_keepBM1_BM12.txt
+
+# 生成新文件：batlow 里排除 feral 的 BF1/BF12，但保留所有 managed（含 BM1/BM12）
+ls -1 \
+  "$BASE/map/batlow_feral/"BatlowBF*.bam \
+  "$BASE/map/batlow_managed/"BatlowBM*.bam \
+| grep -vE '/BatlowBF(1|12)\.bam$' \
+| sort -V \
+> "$BASE/meta/batlow_all_bams_order_exclBF1_BF12_keepBM1_BM12.txt"
+
+
+# create all_regions1.sync
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+
+cat > "$BASE/make_all_regions1.sbatch" <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=all_regions1_sync
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_all_regions1_sync.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_all_regions1_sync.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+OUTDIR=$BASE/sync
+
+YOUNG_ORDER=$BASE/meta/young_all_bams_order.txt
+BATLOW_ORDER=$BASE/meta/batlow_all_bams_order_exclBF1_BF12_keepBM1_BM12.txt
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+P2JAR="$CONDA_PREFIX/share/popoolation2-1.201-0/mpileup2sync.jar"
+
+SCRATCH=/mnt/data/wright/home/scratch/u8021786/all_regions1_sync_$SLURM_JOB_ID
+mkdir -p "$SCRATCH" "$OUTDIR"
+
+# checks
+[[ -f "$REF" ]] || { echo "Missing REF: $REF" >&2; exit 1; }
+[[ -f "$YOUNG_ORDER" ]] || { echo "Missing young order: $YOUNG_ORDER" >&2; exit 1; }
+[[ -f "$BATLOW_ORDER" ]] || { echo "Missing batlow order: $BATLOW_ORDER" >&2; exit 1; }
+
+# combine bam lists (order matters!)
+cat "$YOUNG_ORDER" "$BATLOW_ORDER" > "$SCRATCH/all_regions1_bams_order.txt"
+
+# verify bams & bai exist
+while IFS= read -r b; do
+  [[ -f "$b" ]] || { echo "Missing BAM: $b" >&2; exit 1; }
+  [[ -f "$b.bai" ]] || { echo "Missing BAI: $b.bai" >&2; exit 1; }
+done < "$SCRATCH/all_regions1_bams_order.txt"
+
+# mpileup (use -B as you did before)
+samtools mpileup -B -f "$REF" -b "$SCRATCH/all_regions1_bams_order.txt" \
+  > "$SCRATCH/all_regions1.mpileup"
+
+# mpileup -> sync
+java -ea -Xmx28g -jar "$P2JAR" \
+  --input "$SCRATCH/all_regions1.mpileup" \
+  --output "$SCRATCH/all_regions1.sync" \
+  --fastq-type sanger \
+  --min-qual 20 \
+  --threads "$SLURM_CPUS_PER_TASK"
+
+# move back
+mv "$SCRATCH/all_regions1.sync" "$OUTDIR/all_regions1.sync"
+
+# keep the bam order file for later mapping P1..Pn back to sample names
+cp -av "$SCRATCH/all_regions1_bams_order.txt" "$BASE/meta/all_regions1_bams_order.txt"
+
+# cleanup
+rm -rf "$SCRATCH"
+
+echo "DONE: $OUTDIR/all_regions1.sync"
+echo "ORDER: $BASE/meta/all_regions1_bams_order.txt"
+EOF
+
+
+##############################################################
+
+library(poolfstat)
+sync_file <- "/mnt/data/wright/home/u8021786/popoolation2_project/sync/all_regions1.sync"
+
+# # Infer the number of pools by reading the first line
+first_line <- readLines(sync_file, n = 1)
+n_cols <- length(strsplit(first_line, "\t")[[1]])
+n_pools <- n_cols - 3
+
+cat("n_pools =", n_pools, "\n")
+
+# poolsizes
+n_ind <- 10
+poolsizes <- rep(2 * n_ind, n_pools)
+
+pooldata <- popsync2pooldata(sync.file = sync_file, poolsizes = poolsizes)
+
+################################
+
+fst_matrix <- compute.pairwiseFST(pooldata)
+fst <- fst_matrix@PairwiseFSTmatrix
+
+linear_fst <- fst / (1 - fst)
+
+dist_obj <- as.dist(linear_fst)
+
+# check euclidean
+library(ade4)
+is.euclid(dist_obj)
+
+# result: FALSE
+dist_eucl <- cailliez(dist_obj)
+
+#create metadata ？？？？？？？？
+sample_names <- rownames(fst)
+metadata <- data.frame(
+  pool   = labels(dist_eucl),
+  region = c(rep("Young", 20), rep("Batlow", 26)),
+  feral  = c(rep("feral", 10),
+             rep("managed", 10),
+             rep("feral", 12),
+             rep("managed", 14))
+)
+
+metadata$region <- factor(metadata$region, levels = c("Young", "Batlow"))
+metadata$feral  <- factor(metadata$feral,  levels = c("feral", "managed"))
+
+# 检查是否符合你的设计
+table(metadata$region, metadata$feral)
+
+#adonis2
+library(vegan)
+adonis2(dist_eucl ~ region + feral + region:feral,
+         data = metadata,
+         permutations = 999,
+         by = "margin")
+
+library(vegan)
+ adonis2(dist_eucl ~ region + feral,
+         data = metadata,
+         permutations = 999,
+         by = "margin")
+
+
+
+#question? have negative value-Error in adonis0(formula, data = data, method = method) :
+  # dissimilarities must be non-negative
+
+#1
+range(fst, na.rm = TRUE)
+linear_fst <- fst / (1 - fst)
+range(linear_fst, na.rm = TRUE)
+
+#2
+fst2 <- fst
+fst2[fst2 < 0] <- 0
+diag(fst2) <- 0
+
+#3
+linear_fst <- fst2 / (1 - fst2)
+diag(linear_fst) <- 0
+dist_obj <- as.dist(linear_fst)
+
+#4
+min(dist_eucl)
+
+#5 still have negative value
+d <- as.matrix(dist_eucl)
+d[d < 0] <- 0
+dist_eucl <- as.dist(d)
+
+#6 run again adonis2
+
+
+
+
+#########后
+# pairwise FST
+fst_obj <- compute.pairwiseFST(pooldata)
+
+# linearise
+fst <- fst_obj@PairwiseFSTmatrix
+linear_fst <- fst / (1 - fst)
+
+# turn into dist
+dist_obj <- as.dist(linear_fst)
+
+# check euclidean + fix if needed
+is_e <- ade4::is.euclid(dist_obj)
+cat("is_euclid =", is_e, "\n")
+
+if (!is_e) {
+  dist_eucl <- ade4::cailliez(dist_obj)  # returns a 'dist'
+} else {
+  dist_eucl <- dist_obj
+}
+
+######export
+out_dir <- "/mnt/data/wright/home/u8021786/popoolation2_project/results"
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+# dist_obj -> matrix -> csv
+mat_linear <- as.matrix(dist_obj)
+write.csv(mat_linear, file = file.path(out_dir, "distance_matrix_linearFST.csv"), quote = FALSE)
+
+# dist_eucl -> matrix -> csv
+mat_eucl <- as.matrix(dist_eucl)
+write.csv(mat_eucl, file = file.path(out_dir, "distance_matrix_cailliez.csv"), quote = FALSE)
+
+cat("Wrote:\n",
+    file.path(out_dir, "distance_matrix_linearFST.csv"), "\n",
+    file.path(out_dir, "distance_matrix_cailliez.csv"), "\n")
+
+# create metadata (00_make_metadata_all_regions1_from_poolname.R)
+# scripts/R/0_make_metadata_all_regions1_from_poolname.R
+# Generate metadata for adonis2 from BAM order list (robust: parse from pool name)
+
+bamlist <- "/mnt/data/wright/home/u8021786/popoolation2_project/meta/all_regions1_bams_order.txt"
+out_dir <- "/mnt/data/wright/home/u8021786/popoolation2_project/results"
+out_file <- file.path(out_dir, "pool_metadata_all_regions1.csv")
+
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+bams <- readLines(bamlist)
+bams <- bams[nzchar(bams)]
+
+# pool name from BAM filename
+pool <- sub("\\.bam$", "", basename(bams))
+
+# Parse region from prefix: Young* vs Batlow*
+region <- ifelse(grepl("^Young", pool), "Young",
+                 ifelse(grepl("^Batlow", pool), "Batlow", NA))
+
+# Parse feral/managed from the "F" or "M" after the prefix:
+# YoungBF1 -> Young + B + F -> feral
+# YoungBM1 -> Young + B + M -> managed
+# BatlowBF1 -> Batlow + B + F -> feral
+# BatlowBM1 -> Batlow + B + M -> managed
+feral <- ifelse(grepl("^[A-Za-z]+B[Ff]", pool), "feral",
+                ifelse(grepl("^[A-Za-z]+B[Mm]", pool), "managed", NA))
+
+# sanity check: any NA means parsing failed
+if (any(is.na(region)) || any(is.na(feral))) {
+  bad <- pool[is.na(region) | is.na(feral)]
+  stop("Failed to parse region/feral for: ", paste(bad, collapse = ", "))
+}
+
+metadata <- data.frame(
+  pool   = pool,
+  region = factor(region, levels = c("Young", "Batlow")),
+  feral  = factor(feral,  levels = c("feral", "managed")),
+  bam    = bams,
+  stringsAsFactors = FALSE
+)
+
+# quick table check printed to console
+print(table(metadata$region, metadata$feral))
+
+write.csv(metadata, out_file, row.names = FALSE, quote = FALSE)
+cat("Wrote:", out_file, "\n")
+
+
+######## 本地跑R包
+
+

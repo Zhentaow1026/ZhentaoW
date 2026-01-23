@@ -1,0 +1,126 @@
+find /mnt/data/wright/home/scratch/u8021786 -maxdepth 2 -type f \
+  -name "batlow_feral_exclF1_F12.sync" -o -name "batlow_feral_exclF1_F12.mpileup" | head
+
+find /mnt/data/wright/home/scratch/u8021786 -maxdepth 2 -type f \
+  -name "batlow_managed.sync" -o -name "batlow_managed.mpileup" | head
+
+
+find /mnt/data/wright/home/scratch/u8021786 -maxdepth 2 -type f \
+  -name "young_managed.sync" -o -name "young_managed.mpileup" | head
+
+
+find /mnt/data/wright/home/scratch/u8021786 -maxdepth 2 -type f \
+  -name "young_feral.sync" -o -name "young_feral.mpileup" | head
+
+
+# 找路径
+/mnt/data/wright/home/u8021786/popoolation2_project/results/pool_metadata_all_regions1.csv
+
+scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/results/pool_metadata_all_regions1.csv C:\Users\Tony\Downloads\0107
+
+/mnt/data/wright/home/u8021786/popoolation2_project/results/pool_metadata_all_regions1.csv
+
+
+# 查合并后的sync文件
+ls -lh /mnt/data/wright/home/u8021786/popoolation2_project/sync
+
+# 相对路径和绝对路径的问题
+
+# conda popoolation2 安装在哪？
+/mnt/data/wright/home/u8021786/.conda/envs/popoolation2/bin/snp-frequency-diff.pl
+
+# Calculate allele frequency differences
+# 它在 每一个 SNP 位点 上：用你给的 两个 population（young feral vs young managed）计算：哪些等位基因是 major / minor，它们在 两个群体中的频率，以及 频率差（ΔAF）
+# 要用slurm-然后那个脚本有点问题 pwc和rc 点的问题
+
+#目前在
+/mnt/data/wright/home/u8021786/popoolation2_project/popoolation2_out/young_F_vs_M/young_F_vs_M_pwc
+/mnt/data/wright/home/u8021786/popoolation2_project/popoolation2_out/young_F_vs_M/young_F_vs_M_rc
+
+# batlow的，从合并开始
+batlow_feral_exclF1_F12.mpileup
+batlow_managed.mpileup
+batlow_F_vs_M.sync
+
+# 合并成2个大pool batlow
+batlow_F_vs_M_2pop.sync
+
+#1
+cat > $BASE/slurm_batlow_step1_freqdiff.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_freqdiff
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
+#SBATCH --time=08:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop/logs/%x_%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop/logs/%x_%j.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop.sync
+OUT=$BASE/pop2_batlow_2pop
+mkdir -p "$OUT"
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+# PoPoolation2 scripts location (in your conda env)
+P2DIR="$CONDA_PREFIX/share/popoolation2-1.201-0"
+
+perl "$P2DIR/snp-frequency-diff.pl" \
+  --input "$SYNC" \
+  --output-prefix "$OUT/batlow_F_vs_M" \
+  --min-count 6 \
+  --min-coverage 50 \
+  --max-coverage 2000
+
+echo "DONE step1: $OUT/batlow_F_vs_M_pwc and _rc"
+EOF
+
+
+#2
+cat > $BASE/slurm_batlow_step2_fst_snp.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_fstSNP
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop/logs/%x_%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop/logs/%x_%j.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop.sync
+OUT=$BASE/pop2_batlow_2pop
+mkdir -p "$OUT"
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+# 使用 conda 环境中实际存在的脚本路径（bin/ 下）
+SCRIPT="$CONDA_PREFIX/bin/fst-sliding.pl"
+[[ -f "$SCRIPT" ]] || { echo "Missing script: $SCRIPT" >&2; exit 1; }
+
+# 合并后 poolsize：240 vs 280，教程脚本只能给一个 pool-size
+# 先用折中值 260（你也可以改成 240 或 280）
+POOLSIZE=260
+
+perl "$SCRIPT" \
+  --input "$SYNC" \
+  --output "$OUT/batlow_F_vs_M.SNP.fst" \
+  --suppress-noninformative \
+  --min-count 6 \
+  --min-coverage 50 \
+  --max-coverage 200 \
+  --min-covered-fraction 1 \
+  --window-size 1 \
+  --step-size 1 \
+  --pool-size $POOLSIZE
+
+echo "DONE step2: $OUT/batlow_F_vs_M.SNP.fst"
+EOF
+

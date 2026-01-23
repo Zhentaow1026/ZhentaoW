@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/../config/paths.sh"
+
+mkdir -p "$BASE/meta"
+
+cat > "$BASE/meta/young_feral_map.tsv" <<'EOF'
+4675551	YoungBF1
+4675646	YoungBF1
+4675553	YoungBF2
+4675650	YoungBF2
+4675575	YoungBF3
+4675653	YoungBF3
+4675587	YoungBF4
+4675656	YoungBF4
+4675599	YoungBF5
+4675659	YoungBF5
+4675611	YoungBF6
+4675662	YoungBF6
+4675623	YoungBF7
+4675665	YoungBF7
+4675635	YoungBF8
+4675668	YoungBF8
+4675552	YoungBF9
+4675647	YoungBF9
+4675564	YoungBF10
+4675651	YoungBF10
+EOF
+
+awk '{print $2}' "$BASE/meta/young_feral_map.tsv" | sort -u > "$BASE/meta/young_feral_genotypes.txt"
+wc -l "$BASE/meta/young_feral_genotypes.txt"
+cat "$BASE/meta/young_feral_genotypes.txt"
+
+OUT="$BASE/fastq_by_genotype/young_feral"
+mkdir -p "$OUT"
+
+while read -r GENO; do
+  echo "Merging $GENO ..."
+  ids=$(awk -v g="$GENO" '$2==g{print $1}' "$BASE/meta/young_feral_map.tsv")
+
+  cat $(for id in $ids; do echo "$FASTQDIR/${id}.FASTQ.gz"; done) > "$OUT/${GENO}.FASTQ.gz"
+  gzip -t "$OUT/${GENO}.FASTQ.gz"
+done < "$BASE/meta/young_feral_genotypes.txt"
+
+ls -lh "$OUT" | head

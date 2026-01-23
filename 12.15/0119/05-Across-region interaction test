@@ -91,7 +91,7 @@ is.euclid(dist_obj)
 # result: FALSE
 dist_eucl <- cailliez(dist_obj)
 
-#create metadata
+#create metadata ？？？？？？？？
 sample_names <- rownames(fst)
 
 metadata <- data.frame(
@@ -114,6 +114,13 @@ adonis2(
   data = metadata,
   permutations = 999,
   by = "margin"
+)
+
+library(vegan)
+adonis2(
+  dist_eucl ~ region * feral,
+  data = metadata,
+  permutations = 999,
 )
 
 #question? have negative value-Error in adonis0(formula, data = data, method = method) :

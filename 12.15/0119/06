@@ -1,0 +1,19 @@
+dist_mat <- as.matrix(read.csv(
+  "young_linearFST_distance.csv",
+  row.names = 1,
+  check.names = FALSE
+))
+
+dist_obj <- as.dist(dist_mat)
+
+metadata <- read.csv("young_metadata.csv", stringsAsFactors = TRUE)
+
+library(vegan)
+adonis2(dist_obj ~ feral, data = metadata, permutations = 999)
+
+
+# 可以用的
+> adonis2(dist_eucl ~ region + feral + region:feral,
++         data = metadata,
++         permutations = 999,
++         by = "margin")
