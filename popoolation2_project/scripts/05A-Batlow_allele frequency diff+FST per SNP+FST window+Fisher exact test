@@ -1,0 +1,173 @@
+# step1 allele frequency diff
+
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step1_freqdiff_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_freqdiff1
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
+#SBATCH --time=08:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$OUT" "$LOGDIR"
+
+# conda
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+# check
+SCRIPT="$CONDA_PREFIX/bin/snp-frequency-diff.pl"
+[[ -f "$SCRIPT" ]] || { echo "Missing script: $SCRIPT" >&2; exit 1; }
+[[ -s "$SYNC" ]]   || { echo "Missing/empty SYNC: $SYNC" >&2; exit 1; }
+
+PREFIX="$OUT/batlow_F_vs_M_2pop1"
+OUT_PWC="${PREFIX}_pwc"
+OUT_RC="${PREFIX}_rc"
+
+perl "$SCRIPT" \
+  --input "$SYNC" \
+  --output-prefix "$PREFIX" \
+  --min-count 6 \
+  --min-coverage 50 \
+  --max-coverage 5750
+
+echo "DONE step1: $OUT_PWC and $OUT_RC"
+EOF
+
+#step2:FST per SNP
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step2_fst_snp_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_fstSNP1
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$OUT" "$LOGDIR"
+
+# only one pool-size allowed; keep your value
+POOLSIZE=260
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+SCRIPT="$CONDA_PREFIX/bin/fst-sliding.pl"
+[[ -f "$SCRIPT" ]] || { echo "Missing script: $SCRIPT" >&2; exit 1; }
+[[ -s "$SYNC" ]]   || { echo "Missing/empty SYNC: $SYNC" >&2; exit 1; }
+
+OUT_FST="$OUT/batlow_F_vs_M_2pop1.SNP.fst"
+
+perl "$SCRIPT" \
+  --input "$SYNC" \
+  --output "$OUT_FST" \
+  --suppress-noninformative \
+  --min-count 6 \
+  --min-coverage 50 \
+  --max-coverage 5750 \
+  --min-covered-fraction 1 \
+  --window-size 1 \
+  --step-size 1 \
+  --pool-size "$POOLSIZE"
+
+echo "DONE step2: $OUT_FST"
+EOF
+
+#step3: FST window 500
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step3_fst_window500_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_fstW5001
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$OUT" "$LOGDIR"
+
+POOLSIZE=260
+WIN=500
+STEP=500
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+SCRIPT="$CONDA_PREFIX/bin/fst-sliding.pl"
+[[ -f "$SCRIPT" ]] || { echo "Missing script: $SCRIPT" >&2; exit 1; }
+[[ -s "$SYNC" ]]   || { echo "Missing/empty SYNC: $SYNC" >&2; exit 1; }
+
+OUT_FST="$OUT/batlow_F_vs_M_2pop1.W${WIN}.fst"
+
+perl "$SCRIPT" \
+  --input "$SYNC" \
+  --output "$OUT_FST" \
+  --min-count 6 \
+  --min-coverage 50 \
+  --max-coverage 5750 \
+  --min-covered-fraction 1 \
+  --window-size "$WIN" \
+  --step-size "$STEP" \
+  --pool-size "$POOLSIZE"
+
+echo "DONE step3: $OUT_FST"
+EOF
+
+# step4: fisher test
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step4_fet_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_FET1
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$OUT" "$LOGDIR"
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+SCRIPT="$CONDA_PREFIX/bin/fisher-test.pl"
+[[ -f "$SCRIPT" ]] || { echo "Missing script: $SCRIPT" >&2; exit 1; }
+[[ -s "$SYNC" ]]   || { echo "Missing/empty SYNC: $SYNC" >&2; exit 1; }
+
+OUT_FET="$OUT/batlow_F_vs_M_2pop1.fet"
+
+perl "$SCRIPT" \
+  --input "$SYNC" \
+  --output "$OUT_FET" \
+  --min-count 6 \
+  --min-coverage 50 \
+  --max-coverage 5750 \
+  --suppress-noninformative
+
+echo "DONE step4: $OUT_FET"
+EOF

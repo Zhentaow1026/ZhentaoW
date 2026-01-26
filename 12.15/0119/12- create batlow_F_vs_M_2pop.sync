@@ -1,0 +1,33 @@
+#############把 12+14 合成 2 个超池
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync
+
+IN="$SYNC/batlow_F_vs_M.sync"
+OUT="$SYNC/batlow_F_vs_M_2pop.sync"
+
+awk -F'\t' 'BEGIN{OFS="\t"}
+{
+  split("0 0 0 0 0 0", f, " ")
+  split("0 0 0 0 0 0", m, " ")
+
+  # feral pools: col 4..15 (12 pools)
+  for (i=4; i<=15; i++){
+    split($i,a,":")
+    for (k=1;k<=6;k++) f[k]+=a[k]
+  }
+
+  # managed pools: col 16..29 (14 pools)
+  for (i=16; i<=29; i++){
+    split($i,a,":")
+    for (k=1;k<=6;k++) m[k]+=a[k]
+  }
+
+  feral = f[1]":"f[2]":"f[3]":"f[4]":"f[5]":"f[6]
+  managed= m[1]":"m[2]":"m[3]":"m[4]":"m[5]":"m[6]
+
+  print $1,$2,$3,feral,managed
+}' "$IN" > "$OUT"
+
+echo -n "OUT NF = "; awk -F'\t' '{print NF; exit}' "$OUT"
+head -n 2 "$OUT"

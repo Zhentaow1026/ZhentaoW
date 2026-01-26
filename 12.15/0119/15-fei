@@ -1,0 +1,24 @@
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+IN="$BASE/pop2_batlow_2pop1/batlow_F_vs_M_2pop1.SNP.fst"
+OUT="$BASE/pop2_batlow_2pop1/batlow_F_vs_M_2pop1.SNP.fst.hist_tail_gt0.2.png"
+
+Rscript -e '
+args<-commandArgs(trailingOnly=TRUE); infile<-args[1]; outfile<-args[2]
+x<-readLines(infile, warn=FALSE)
+fst<-suppressWarnings(as.numeric(trimws(sub(".*=","",x))))
+fst<-fst[is.finite(fst) & fst>=0 & fst<=1]
+tail<-fst[fst>0.2]
+
+png(outfile, width=1600, height=1200, res=180)
+hist(tail, breaks=80,
+     main="Per-SNP FST tail (Batlow: Feral vs Managed) [FST > 0.2]",
+     xlab="FST", ylab="Number of SNPs", xlim=c(0.2,1),
+     col="grey80", border="grey40")
+dev.off()
+cat("Wrote:", outfile, "\n")
+cat("Tail N=", length(tail), " (", round(length(tail)/length(fst),4), "of all)\n")
+' "$IN" "$OUT"
+
+
+# 如何拷贝回电脑桌面
+scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/batlow_F_vs_M_2pop1.SNP.fst.hist_logY.png C:\Users\Tony\Downloads\0107

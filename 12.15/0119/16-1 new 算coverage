@@ -1,0 +1,247 @@
+# Sync合并与过滤问题 qc_pick_maxcov.sh--这个肯定要优化
+#以下是优化过后的：（还得改）
+
+#创建脚本
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+cat > $BASE/qc_pick_maxcov.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage: ./qc_pick_maxcov.sh input.sync [mincov] [sample_lines]
+SYNC=${1:?need input .sync}
+MINCOV=${2:-50}
+SAMPLE_LINES=${3:-2000000}
+
+echo "FILE   : $SYNC"
+echo "MINCOV : $MINCOV"
+echo "SAMPLE : $SAMPLE_LINES (max)"
+
+TOTAL=$(wc -l < "$SYNC")
+if (( TOTAL <= SAMPLE_LINES )); then
+  CMD="cat"
+else
+  p=$(awk -v s="$SAMPLE_LINES" -v t="$TOTAL" 'BEGIN{print s/t}')
+  CMD="awk -v p=$p 'BEGIN{srand()} rand()<p'"
+fi
+
+tmp=$(mktemp)
+eval "$CMD \"$SYNC\"" \
+| awk -F'\t' -v min="$MINCOV" '
+  function cov(s, a){ split(s,a,":"); return a[1]+a[2]+a[3]+a[4] }
+  { c1=cov($4); c2=cov($5); if(c1>=min && c2>=min) print c1"\t"c2 }
+' > "$tmp"
+
+N=$(wc -l < "$tmp")
+echo "USED   : $N lines (both groups >= $MINCOV)"
+
+quantile_col () {
+  local col=$1
+  cut -f"$col" "$tmp" | sort -n > "${tmp}.c${col}"
+  local n=$(wc -l < "${tmp}.c${col}")
+  awk -v n="$n" '
+    function at(p){ i=int(p*n); if(i<1)i=1; if(i>n)i=n; return i }
+    { a[NR]=$1 }
+    END{
+      printf "N=%d  P50=%d  P90=%d  P95=%d  P99=%d  Max=%d\n",
+             n, a[at(0.50)], a[at(0.90)], a[at(0.95)], a[at(0.99)], a[n]
+    }' "${tmp}.c${col}"
+}
+
+echo "FERAL  coverage (A+T+C+G):"
+q1=$(quantile_col 1)
+echo "  $q1"
+
+echo "MANAGED coverage (A+T+C+G):"
+q2=$(quantile_col 2)
+echo "  $q2"
+
+p99_feral=$(echo "$q1" | sed -n 's/.*P99=\([0-9]\+\).*/\1/p')
+p99_manag=$(echo "$q2" | sed -n 's/.*P99=\([0-9]\+\).*/\1/p')
+
+maxp99=$p99_feral
+if (( p99_manag > maxp99 )); then maxp99=$p99_manag; fi
+
+echo "RECOMMEND: --max-coverage $maxp99  (max of P99 across groups)"
+
+rm -f "$tmp" "${tmp}.c1" "${tmp}.c2"
+EOF
+
+#给执行权限
+chmod +x $BASE/qc_pick_maxcov.sh
+
+#正确运行
+$BASE/qc_pick_maxcov.sh $BASE/sync/batlow_F_vs_M_2pop1.sync 50 2000000
+
+$BASE/qc_pick_maxcov.sh $BASE/sync/young_F_vs_M_2pop1.sync 50 2000000
+
+
+
+
+
+
+#以下是旧的
+
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/qc_pick_maxcov.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC_DIR="$BASE/sync"
+
+BATLOW="$SYNC_DIR/batlow_F_vs_M_2pop1.sync"
+YOUNG="$SYNC_DIR/young_F_vs_M_2pop1.sync"
+
+# 你老师教程常用的 min-coverage=50，可在命令行改：MINCOV=80 ./qc_pick_maxcov.sh
+MINCOV="${MINCOV:-50}"
+
+# 抽样行数：默认 2,000,000 行（一般足够稳）
+# 如果文件很小，会自动用全量
+SAMPLE_LINES="${SAMPLE_LINES:-2000000}"
+
+# 取整到多少为步进（让 maxcov 不是奇怪数字，比如取整到 50）
+ROUND_TO="${ROUND_TO:-50}"
+
+# ------------------------------------------------------------
+# 工具函数：给定一个 sync 文件，输出 coverage 统计 + 推荐 maxcov
+# ------------------------------------------------------------
+analyze_sync () {
+  local file="$1"
+  local label="$2"
+
+  [[ -f "$file" ]] || { echo "ERROR: missing file: $file" >&2; exit 1; }
+
+  echo "============================================================"
+  echo "FILE : $file"
+  echo "LABEL: $label"
+  echo "MINCOV=$MINCOV  SAMPLE_LINES=$SAMPLE_LINES  ROUND_TO=$ROUND_TO"
+  echo "------------------------------------------------------------"
+
+  # 1) 基本格式检查：应为 5 列
+  local nf
+  nf=$(awk -F'\t' 'NR==1{print NF; exit}' "$file")
+  echo "NF(first line) = $nf (expect 5)"
+  if [[ "$nf" -ne 5 ]]; then
+    echo "ERROR: sync does not have 5 columns (chr pos ref + 2 pops). Stop." >&2
+    exit 1
+  fi
+
+  # 2) 文件行数
+  local total
+  total=$(wc -l < "$file")
+  echo "Total lines    = $total"
+
+  # 3) 决定抽样策略：如果文件行数 <= SAMPLE_LINES，则全量；否则抽样
+  local mode="FULL"
+  local p="1.0"
+  if [[ "$total" -gt "$SAMPLE_LINES" ]]; then
+    mode="SAMPLE"
+    # 抽样概率 p = SAMPLE_LINES / total
+    p=$(awk -v s="$SAMPLE_LINES" -v t="$total" 'BEGIN{printf "%.12f", s/t}')
+  fi
+  echo "Mode           = $mode (p=$p)"
+
+  # 4) 生成抽样 coverage 列表（A+T+C+G），并统计 0 覆盖、同时达标比例
+  #    注意：coverage 不算 N 和 del
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  trap 'rm -rf "$tmpdir"' RETURN
+
+  local feral_cov="$tmpdir/feral.cov"
+  local managed_cov="$tmpdir/managed.cov"
+
+  # 同时统计：
+  # - sample_n：抽样行数
+  # - zf/zm：coverage=0 的数量
+  # - both_ge：两组都 >= MINCOV 的数量
+  awk -F'\t' -v p="$p" -v mincov="$MINCOV" -v fer="$feral_cov" -v man="$managed_cov" '
+    BEGIN{s=0; zf=0; zm=0; both_ge=0}
+    {
+      if (p<1.0 && rand()>p) next
+
+      split($4,f,":"); cf=f[1]+f[2]+f[3]+f[4]
+      split($5,m,":"); cm=m[1]+m[2]+m[3]+m[4]
+
+      print cf >> fer
+      print cm >> man
+
+      s++
+      if (cf==0) zf++
+      if (cm==0) zm++
+      if (cf>=mincov && cm>=mincov) both_ge++
+    }
+    END{
+      printf "Sample lines   = %d\n", s
+      printf "Feral cov=0    = %d (%.4f)\n", zf, (s?zf/s:0)
+      printf "Managed cov=0  = %d (%.4f)\n", zm, (s?zm/s:0)
+      printf "Both >=%d      = %d (%.4f)\n", mincov, both_ge, (s?both_ge/s:0)
+    }
+  ' "$file"
+
+  # 5) 计算分位数（对 sample 排序即可）
+  #    输出：P50/P90/P95/P99/Max
+  quantiles () {
+    local covfile="$1"
+    local name="$2"
+
+    sort -n "$covfile" > "$covfile.sorted"
+    local n
+    n=$(wc -l < "$covfile.sorted")
+    if [[ "$n" -eq 0 ]]; then
+      echo "$name: no sampled data"
+      return
+    fi
+
+    awk -v name="$name" -v n="$n" '
+      BEGIN{
+        p50=int(0.50*n); if(p50<1)p50=1
+        p90=int(0.90*n); if(p90<1)p90=1
+        p95=int(0.95*n); if(p95<1)p95=1
+        p99=int(0.99*n); if(p99<1)p99=1
+      }
+      {
+        if (NR==p50) v50=$1
+        if (NR==p90) v90=$1
+        if (NR==p95) v95=$1
+        if (NR==p99) v99=$1
+        vmax=$1
+      }
+      END{
+        printf "%s  N=%d  P50=%d  P90=%d  P95=%d  P99=%d  Max=%d\n", name, n, v50, v90, v95, v99, vmax
+      }
+    ' "$covfile.sorted"
+  }
+
+  echo "---- Coverage quantiles (A+T+C+G) ----"
+  local fer_line man_line
+  fer_line=$(quantiles "$feral_cov"   "FERAL  ")
+  man_line=$(quantiles "$managed_cov" "MANAGED")
+  echo "$fer_line"
+  echo "$man_line"
+
+  # 6) 给出建议 max-coverage：取两组 P99 的 max，然后按 ROUND_TO 向上取整
+  # 从 quantiles 输出里抓 P99
+  local fer_p99 man_p99
+  fer_p99=$(echo "$fer_line" | awk '{for(i=1;i<=NF;i++) if($i ~ /^P99=/){split($i,a,"="); print a[2]}}')
+  man_p99=$(echo "$man_line" | awk '{for(i=1;i<=NF;i++) if($i ~ /^P99=/){split($i,a,"="); print a[2]}}')
+
+  local base_max
+  base_max=$(( fer_p99 > man_p99 ? fer_p99 : man_p99 ))
+
+  # 向上取整到 ROUND_TO
+  local rec
+  rec=$(( ( (base_max + ROUND_TO - 1) / ROUND_TO ) * ROUND_TO ))
+
+  echo "---- Recommendation ----"
+  echo "Suggested --max-coverage ≈ round_up(max(P99_feral, P99_managed))"
+  echo "max(P99)=$base_max  -> recommended maxcov=$rec"
+  echo
+}
+
+# 主流程：跑 Batlow + Young
+analyze_sync "$BATLOW" "Batlow feral vs managed (2-pop)"
+analyze_sync "$YOUNG"  "Young  feral vs managed (2-pop)"
+
+echo "DONE. Use the recommended --max-coverage values above for PoPoolation2."
+EOF
+
+chmod +x /mnt/data/wright/home/u8021786/popoolation2_project/qc_pick_maxcov.sh

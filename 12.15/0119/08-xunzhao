@@ -12,6 +12,11 @@ find /mnt/data/wright/home/scratch/u8021786 -maxdepth 2 -type f \
 find /mnt/data/wright/home/scratch/u8021786 -maxdepth 2 -type f \
   -name "young_feral.sync" -o -name "young_feral.mpileup" | head
 
+find /mnt/data/wright/home/scratch/u8021786 -maxdepth 2 -type f \
+  -name "batlow_F_vs_M_2pop1.SNP.fst" -o -name "batlow_F_vs_M_2pop1.mpileup" | head
+
+  
+
 
 # 找路径
 /mnt/data/wright/home/u8021786/popoolation2_project/results/pool_metadata_all_regions1.csv

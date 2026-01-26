@@ -1,0 +1,47 @@
+#######也是优化 而且这个方法和10号还不一样
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync
+
+F1="$SYNC/batlow_feral_exclF1_F12.sync"
+F2="$SYNC/batlow_managed.sync"
+OUT="$SYNC/batlow_F_vs_M.sync"
+
+NF1=$(awk -F'\t' '{print NF; exit}' "$F1")
+NF2=$(awk -F'\t' '{print NF; exit}' "$F2")
+
+echo "NF feral  =$NF1 (pools=$((NF1-3)))"
+echo "NF managed=$NF2 (pools=$((NF2-3)))"
+
+# 1) key + sort
+awk -F'\t' 'BEGIN{OFS="\t"}{print $1":"$2,$0}' "$F1" | sort -k1,1 > /tmp/batlow_feral.key
+awk -F'\t' 'BEGIN{OFS="\t"}{print $1":"$2,$0}' "$F2" | sort -k1,1 > /tmp/batlow_managed.key
+
+# 2) join + 输出：chr pos ref + feral pools + managed pools（跳过managed头3列）
+join -t $'\t' /tmp/batlow_feral.key /tmp/batlow_managed.key \
+| awk -F'\t' -v NF1="$NF1" -v NF2="$NF2" 'BEGIN{OFS="\t"}
+  {
+    # join后结构：
+    # 1 = key
+    # 2..(1+NF1)              = feral整行
+    # (2+NF1)..(1+NF1+NF2)    = managed整行
+
+    sF = 2
+    eF = 1 + NF1
+    sM = 2 + NF1
+    eM = 1 + NF1 + NF2
+
+    # 输出 feral 的 chr pos ref
+    printf "%s\t%s\t%s", $(sF), $(sF+1), $(sF+2)
+
+    # 输出 feral 的 pools（从 sF+3 到 eF）
+    for (i=sF+3; i<=eF; i++) printf "\t%s", $i
+
+    # 输出 managed 的 pools（跳过 managed 的 chr pos ref，即 sM..sM+2，取 sM+3..eM）
+    for (i=sM+3; i<=eM; i++) printf "\t%s", $i
+
+    printf "\n"
+  }' > "$OUT"
+
+echo -n "batlow_F_vs_M.sync NF = "
+awk -F'\t' '{print NF; exit}' "$OUT"

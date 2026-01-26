@@ -1,0 +1,284 @@
+
+# step1
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step1_freqdiff_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_freqdiff1
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
+#SBATCH --time=08:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+set -x
+trap 'echo "ERROR on line $LINENO"; exit 1' ERR
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$LOGDIR"
+
+echo "==== SLURM JOB INFO ===="
+echo "JOBID=${SLURM_JOB_ID:-NA}"
+echo "JOBNAME=${SLURM_JOB_NAME:-NA}"
+echo "HOST=$(hostname)"
+echo "PWD=$(pwd)"
+echo "BASE=$BASE"
+echo "OUT=$OUT"
+echo "LOGDIR=$LOGDIR"
+echo "SYNC=$SYNC"
+echo "========================"
+
+ls -ld "$BASE" "$OUT" "$LOGDIR"
+ls -lh "$SYNC"
+
+bash -lc "
+  set -euo pipefail
+
+  source /opt/conda/etc/profile.d/conda.sh
+  conda activate popoolation2
+
+  echo \"CONDA_PREFIX=\$CONDA_PREFIX\"
+  which perl
+  perl -v | head -n 2
+
+  # Find the PoPoolation2 script robustly (do NOT hardcode versioned share path)
+  SCRIPT=\$(find \"\$CONDA_PREFIX\" -type f -name 'snp-frequency-diff.pl' 2>/dev/null | head -n 1 || true)
+
+  if [ -z \"\$SCRIPT\" ]; then
+    echo \"ERROR: snp-frequency-diff.pl not found under \$CONDA_PREFIX\"
+    echo \"Dumping \$CONDA_PREFIX/share for debugging:\"
+    ls -lah \"\$CONDA_PREFIX/share\" || true
+    echo \"Try: conda list | grep -i popoolation\"
+    exit 2
+  fi
+
+  echo \"Using SCRIPT=\$SCRIPT\"
+  ls -lh \"\$SCRIPT\"
+
+  perl \"\$SCRIPT\" \
+    --input \"$SYNC\" \
+    --output-prefix \"$OUT/batlow_F_vs_M_2pop1\" \
+    --min-count 6 \
+    --min-coverage 50 \
+    --max-coverage 5750
+
+  echo \"DONE step1: $OUT/batlow_F_vs_M_2pop1_pwc and _rc\"
+"
+EOF
+
+#step2:fst SNP（window=1）
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step2_fst_snp_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_fstSNP1
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+set -x
+trap 'echo "ERROR on line $LINENO"; exit 1' ERR
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$LOGDIR"
+
+# 只能给一个 pool-size：用折中值
+POOLSIZE=260
+
+echo "==== SLURM JOB INFO ===="
+echo "JOBID=${SLURM_JOB_ID:-NA}"
+echo "JOBNAME=${SLURM_JOB_NAME:-NA}"
+echo "HOST=$(hostname)"
+echo "PWD=$(pwd)"
+echo "BASE=$BASE"
+echo "OUT=$OUT"
+echo "LOGDIR=$LOGDIR"
+echo "SYNC=$SYNC"
+echo "POOLSIZE=$POOLSIZE"
+echo "========================"
+
+ls -ld "$BASE" "$OUT" "$LOGDIR"
+ls -lh "$SYNC"
+
+bash -lc "
+  set -euo pipefail
+  source /opt/conda/etc/profile.d/conda.sh
+  conda activate popoolation2
+
+  echo \"CONDA_PREFIX=\$CONDA_PREFIX\"
+  which perl
+
+  SCRIPT=\$(find \"\$CONDA_PREFIX\" -type f -name 'fst-sliding.pl' 2>/dev/null | head -n 1 || true)
+  if [ -z \"\$SCRIPT\" ]; then
+    echo 'ERROR: fst-sliding.pl not found under CONDA_PREFIX'
+    ls -lah \"\$CONDA_PREFIX/share\" || true
+    conda list | grep -i popoolation || true
+    exit 2
+  fi
+
+  echo \"Using SCRIPT=\$SCRIPT\"
+  ls -lh \"\$SCRIPT\"
+
+  perl \"\$SCRIPT\" \
+    --input \"$SYNC\" \
+    --output \"$OUT/batlow_F_vs_M_2pop1.SNP.fst\" \
+    --suppress-noninformative \
+    --min-count 6 \
+    --min-coverage 50 \
+    --max-coverage 5750 \
+    --min-covered-fraction 1 \
+    --window-size 1 \
+    --step-size 1 \
+    --pool-size $POOLSIZE
+
+  echo \"DONE step2: $OUT/batlow_F_vs_M_2pop1.SNP.fst\"
+"
+EOF
+
+#step3: fst window 500/500
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step3_fst_window500_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_fstW5001
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+set -x
+trap 'echo "ERROR on line $LINENO"; exit 1' ERR
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$LOGDIR"
+
+POOLSIZE=260
+WIN=500
+STEP=500
+
+echo "==== SLURM JOB INFO ===="
+echo "JOBID=${SLURM_JOB_ID:-NA}"
+echo "JOBNAME=${SLURM_JOB_NAME:-NA}"
+echo "HOST=$(hostname)"
+echo "PWD=$(pwd)"
+echo "BASE=$BASE"
+echo "OUT=$OUT"
+echo "LOGDIR=$LOGDIR"
+echo "SYNC=$SYNC"
+echo "POOLSIZE=$POOLSIZE  WIN=$WIN  STEP=$STEP"
+echo "========================"
+
+ls -ld "$BASE" "$OUT" "$LOGDIR"
+ls -lh "$SYNC"
+
+bash -lc "
+  set -euo pipefail
+  source /opt/conda/etc/profile.d/conda.sh
+  conda activate popoolation2
+
+  echo \"CONDA_PREFIX=\$CONDA_PREFIX\"
+  which perl
+
+  SCRIPT=\$(find \"\$CONDA_PREFIX\" -type f -name 'fst-sliding.pl' 2>/dev/null | head -n 1 || true)
+  if [ -z \"\$SCRIPT\" ]; then
+    echo 'ERROR: fst-sliding.pl not found under CONDA_PREFIX'
+    ls -lah \"\$CONDA_PREFIX/share\" || true
+    conda list | grep -i popoolation || true
+    exit 2
+  fi
+
+  echo \"Using SCRIPT=\$SCRIPT\"
+  ls -lh \"\$SCRIPT\"
+
+  perl \"\$SCRIPT\" \
+    --input \"$SYNC\" \
+    --output \"$OUT/batlow_F_vs_M_2pop1.W${WIN}.fst\" \
+    --min-count 6 \
+    --min-coverage 50 \
+    --max-coverage 5750 \
+    --min-covered-fraction 1 \
+    --window-size $WIN \
+    --step-size $STEP \
+    --pool-size $POOLSIZE
+
+  echo \"DONE step3: $OUT/batlow_F_vs_M_2pop1.W${WIN}.fst\"
+"
+EOF
+
+#step4: Fisher exact test
+cat > /mnt/data/wright/home/u8021786/popoolation2_project/slurm_batlow_step4_fet_2pop1.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=BL_FET1
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
+#SBATCH --time=12:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/pop2_batlow_2pop1/logs/%j.err
+
+set -euo pipefail
+set -x
+trap 'echo "ERROR on line $LINENO"; exit 1' ERR
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+SYNC=$BASE/sync/batlow_F_vs_M_2pop1.sync
+OUT=$BASE/pop2_batlow_2pop1
+LOGDIR=$OUT/logs
+mkdir -p "$LOGDIR"
+
+echo "==== SLURM JOB INFO ===="
+echo "JOBID=${SLURM_JOB_ID:-NA}"
+echo "JOBNAME=${SLURM_JOB_NAME:-NA}"
+echo "HOST=$(hostname)"
+echo "PWD=$(pwd)"
+echo "BASE=$BASE"
+echo "OUT=$OUT"
+echo "LOGDIR=$LOGDIR"
+echo "SYNC=$SYNC"
+echo "========================"
+
+ls -ld "$BASE" "$OUT" "$LOGDIR"
+ls -lh "$SYNC"
+
+bash -lc "
+  set -euo pipefail
+  source /opt/conda/etc/profile.d/conda.sh
+  conda activate popoolation2
+
+  echo \"CONDA_PREFIX=\$CONDA_PREFIX\"
+  which perl
+
+  SCRIPT=\$(find \"\$CONDA_PREFIX\" -type f -name 'fisher-test.pl' 2>/dev/null | head -n 1 || true)
+  if [ -z \"\$SCRIPT\" ]; then
+    echo 'ERROR: fisher-test.pl not found under CONDA_PREFIX'
+    ls -lah \"\$CONDA_PREFIX/share\" || true
+    conda list | grep -i popoolation || true
+    exit 2
+  fi
+
+  echo \"Using SCRIPT=\$SCRIPT\"
+  ls -lh \"\$SCRIPT\"
+
+  perl \"\$SCRIPT\" \
+    --input \"$SYNC\" \
+    --output \"$OUT/batlow_F_vs_M_2pop1.fet\" \
+    --min-count 6 \
+    --min-coverage 50 \
+    --max-coverage 5750 \
+    --suppress-noninformative
+
+  echo \"DONE step4: $OUT/batlow_F_vs_M_2pop1.fet\"
+"
+EOF

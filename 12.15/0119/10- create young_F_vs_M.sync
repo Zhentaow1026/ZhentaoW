@@ -1,0 +1,46 @@
+# 来自：定位列数异常问题-可以看看能不能优化
+
+# 0) 删除错误的合并结果（如果存在）
+rm -f "$SYNC/young_F_vs_M.sync"
+
+# 1) 生成带 key 的中间文件（key = chr:pos），并排序
+awk -F'\t' 'BEGIN{OFS="\t"}{key=$1":"$2; print key,$0}' "$SYNC/young_feral.sync" \
+  | sort -k1,1 > /tmp/young_feral.key
+
+awk -F'\t' 'BEGIN{OFS="\t"}{key=$1":"$2; print key,$0}' "$SYNC/young_managed.sync" \
+  | sort -k1,1 > /tmp/young_managed.key
+
+# 2) 按 key 对齐合并：输出标准 p1_p2.sync 格式（23列），并沿用原文件名 young_F_vs_M.sync
+#    输出列：chr pos ref + feral(10 pools) + managed(10 pools)
+join -t $'\t' /tmp/young_feral.key /tmp/young_managed.key \
+  | awk -F'\t' 'BEGIN{OFS="\t"}
+    {
+      # $1=key
+      # $2..$14 = feral原始13列 (chr pos ref + 10 pools)
+      # $15..$27 = managed原始13列
+      # 丢掉 managed 的 chr/pos/ref (即 $15..$17)，只保留它的 10 pools ($18..$27)
+      print $2,$3,$4, \
+            $5,$6,$7,$8,$9,$10,$11,$12,$13,$14, \
+            $18,$19,$20,$21,$22,$23,$24,$25,$26,$27
+    }' > "$SYNC/young_F_vs_M.sync"
+
+# 3) 验收：列数应该是 23
+echo -n "young_F_vs_M.sync NF = "
+awk -F'\t' '{print NF; exit}' "$SYNC/young_F_vs_M.sync"
+
+# 4) 验收：前1行看看格式（chr pos ref 后面 20 个计数字段）
+echo "first line:"
+head -n 1 "$SYNC/young_F_vs_M.sync"
+
+# 5) 统计 join 后保留下来的位点数，以及各输入文件位点数（看是否有丢失）
+echo -n "feral lines   = "; wc -l < "$SYNC/young_feral.sync"
+echo -n "managed lines = "; wc -l < "$SYNC/young_managed.sync"
+echo -n "merged lines  = "; wc -l < "$SYNC/young_F_vs_M.sync"
+
+# 6) 如 merged lines 明显更少，输出丢失原因的粗略统计（可选但很有用）
+#    计算只在 feral / 只在 managed 的位点数（需要 coreutils 的 comm）
+cut -f1,2 "$SYNC/young_feral.sync"   | awk 'BEGIN{OFS="\t"}{print $1,$2}' | sort -k1,1 -k2,2n > /tmp/feral.pos
+cut -f1,2 "$SYNC/young_managed.sync" | awk 'BEGIN{OFS="\t"}{print $1,$2}' | sort -k1,1 -k2,2n > /tmp/managed.pos
+comm -23 /tmp/feral.pos /tmp/managed.pos | wc -l | awk '{print "only-in-feral   =", $1}'
+comm -13 /tmp/feral.pos /tmp/managed.pos | wc -l | awk '{print "only-in-managed =", $1}'
+comm -12 /tmp/feral.pos /tmp/managed.pos | wc -l | awk '{print "in-both         =", $1}'

@@ -1,0 +1,228 @@
+cat > $BASE/make_sync_batlow_feral_exclF1_F12.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=batlow_feral_sync
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_batlow_feral_sync.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_batlow_feral_sync.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+MAPDIR=$BASE/map
+OUTDIR=$BASE/sync
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+P2JAR="$CONDA_PREFIX/share/popoolation2-1.201-0/mpileup2sync.jar"
+
+SCRATCH=/mnt/data/wright/home/scratch/u8021786/batlow_feral_sync_$SLURM_JOB_ID
+mkdir -p "$SCRATCH" "$OUTDIR"
+
+# Batlow feral BAMs (exclude BF1 and BF12)
+BAMS=(
+  $MAPDIR/batlow_feral/BatlowBF2.bam
+  $MAPDIR/batlow_feral/BatlowBF3.bam
+  $MAPDIR/batlow_feral/BatlowBF4.bam
+  $MAPDIR/batlow_feral/BatlowBF5.bam
+  $MAPDIR/batlow_feral/BatlowBF6.bam
+  $MAPDIR/batlow_feral/BatlowBF7.bam
+  $MAPDIR/batlow_feral/BatlowBF8.bam
+  $MAPDIR/batlow_feral/BatlowBF9.bam
+  $MAPDIR/batlow_feral/BatlowBF10.bam
+  $MAPDIR/batlow_feral/BatlowBF11.bam
+  $MAPDIR/batlow_feral/BatlowBF13.bam
+  $MAPDIR/batlow_feral/BatlowBF14.bam
+)
+
+# sanity check
+for b in "${BAMS[@]}"; do
+  [[ -f "$b" ]] || { echo "Missing BAM: $b"; exit 1; }
+  [[ -f "$b.bai" ]] || { echo "Missing BAI: $b.bai"; exit 1; }
+done
+
+# mpileup
+samtools mpileup -B -f "$REF" "${BAMS[@]}" > "$SCRATCH/batlow_feral_exclF1_F12.mpileup"
+
+# mpileup → sync
+java -Xmx28g -jar "$P2JAR" \
+  --input "$SCRATCH/batlow_feral_exclF1_F12.mpileup" \
+  --output "$SCRATCH/batlow_feral_exclF1_F12.sync" \
+  --fastq-type sanger \
+  --min-qual 20 \
+  --threads "$SLURM_CPUS_PER_TASK"
+
+mv "$SCRATCH/batlow_feral_exclF1_F12.sync" "$OUTDIR/"
+rm -rf "$SCRATCH"
+
+echo "DONE: $OUTDIR/batlow_feral_exclF1_F12.sync"
+EOF
+
+
+###########################################
+
+cat > $BASE/make_sync_batlow_managed_keepBM1_BM12.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=batlow_managed_sync
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_batlow_managed_sync.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_batlow_managed_sync.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+MAPDIR=$BASE/map
+OUTDIR=$BASE/sync
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+P2JAR="$CONDA_PREFIX/share/popoolation2-1.201-0/mpileup2sync.jar"
+
+SCRATCH=/mnt/data/wright/home/scratch/u8021786/batlow_managed_sync_$SLURM_JOB_ID
+mkdir -p "$SCRATCH" "$OUTDIR"
+
+# Batlow managed BAMs (keep all, including BM1 and BM12)
+BAMS=( $MAPDIR/batlow_managed/BatlowBM*.bam )
+
+# sanity check
+[[ ${#BAMS[@]} -gt 0 ]] || { echo "No BAMs matched: $MAPDIR/batlow_managed/BatlowBM*.bam" >&2; exit 1; }
+for b in "${BAMS[@]}"; do
+  [[ -f "$b" ]] || { echo "Missing BAM: $b" >&2; exit 1; }
+  [[ -f "$b.bai" ]] || { echo "Missing BAI: $b.bai" >&2; exit 1; }
+done
+
+# mpileup
+samtools mpileup -B -f "$REF" "${BAMS[@]}" > "$SCRATCH/batlow_managed.mpileup"
+
+# mpileup → sync
+java -Xmx28g -jar "$P2JAR" \
+  --input "$SCRATCH/batlow_managed.mpileup" \
+  --output "$SCRATCH/batlow_managed.sync" \
+  --fastq-type sanger \
+  --min-qual 20 \
+  --threads "$SLURM_CPUS_PER_TASK"
+
+mv "$SCRATCH/batlow_managed.sync" "$OUTDIR/"
+rm -rf "$SCRATCH"
+
+echo "DONE: $OUTDIR/batlow_managed.sync"
+EOF
+
+
+#############################################
+
+cat > $BASE/make_sync_young_feral.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=young_feral_sync
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_young_feral_sync.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_young_feral_sync.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+MAPDIR=$BASE/map
+OUTDIR=$BASE/sync
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+P2JAR="$CONDA_PREFIX/share/popoolation2-1.201-0/mpileup2sync.jar"
+
+SCRATCH=/mnt/data/wright/home/scratch/u8021786/young_feral_sync_$SLURM_JOB_ID
+mkdir -p "$SCRATCH" "$OUTDIR"
+
+# Young feral BAMs
+BAMS=( $MAPDIR/young_feral/YoungBF*.bam )
+
+# sanity check
+[[ ${#BAMS[@]} -gt 0 ]] || { echo "No BAMs matched: $MAPDIR/young_feral/YoungBF*.bam" >&2; exit 1; }
+for b in "${BAMS[@]}"; do
+  [[ -f "$b" ]] || { echo "Missing BAM: $b" >&2; exit 1; }
+  [[ -f "$b.bai" ]] || { echo "Missing BAI: $b.bai" >&2; exit 1; }
+done
+
+# mpileup
+samtools mpileup -B -f "$REF" "${BAMS[@]}" > "$SCRATCH/young_feral.mpileup"
+
+# mpileup → sync
+java -Xmx28g -jar "$P2JAR" \
+  --input "$SCRATCH/young_feral.mpileup" \
+  --output "$SCRATCH/young_feral.sync" \
+  --fastq-type sanger \
+  --min-qual 20 \
+  --threads "$SLURM_CPUS_PER_TASK"
+
+mv "$SCRATCH/young_feral.sync" "$OUTDIR/"
+rm -rf "$SCRATCH"
+
+echo "DONE: $OUTDIR/young_feral.sync"
+EOF
+
+
+#############################################
+
+cat > $BASE/make_sync_young_managed.sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=young_managed_sync
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=24:00:00
+#SBATCH --output=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_young_managed_sync.out
+#SBATCH --error=/mnt/data/wright/home/u8021786/popoolation2_project/slurm_%j_young_managed_sync.err
+
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+REF=$BASE/ref/Amel_HAv3.1.fna
+MAPDIR=$BASE/map
+OUTDIR=$BASE/sync
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+P2JAR="$CONDA_PREFIX/share/popoolation2-1.201-0/mpileup2sync.jar"
+
+SCRATCH=/mnt/data/wright/home/scratch/u8021786/young_managed_sync_$SLURM_JOB_ID
+mkdir -p "$SCRATCH" "$OUTDIR"
+
+# Young managed BAMs
+BAMS=( $MAPDIR/young_managed/YoungBM*.bam )
+
+# sanity check
+[[ ${#BAMS[@]} -gt 0 ]] || { echo "No BAMs matched: $MAPDIR/young_managed/YoungBM*.bam" >&2; exit 1; }
+for b in "${BAMS[@]}"; do
+  [[ -f "$b" ]] || { echo "Missing BAM: $b" >&2; exit 1; }
+  [[ -f "$b.bai" ]] || { echo "Missing BAI: $b.bai" >&2; exit 1; }
+done
+
+# mpileup
+samtools mpileup -B -f "$REF" "${BAMS[@]}" > "$SCRATCH/young_managed.mpileup"
+
+# mpileup → sync
+java -Xmx28g -jar "$P2JAR" \
+  --input "$SCRATCH/young_managed.mpileup" \
+  --output "$SCRATCH/young_managed.sync" \
+  --fastq-type sanger \
+  --min-qual 20 \
+  --threads "$SLURM_CPUS_PER_TASK"
+
+mv "$SCRATCH/young_managed.sync" "$OUTDIR/"
+rm -rf "$SCRATCH"
+
+echo "DONE: $OUTDIR/young_managed.sync"
+EOF
