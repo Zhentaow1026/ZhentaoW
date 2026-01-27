@@ -47,6 +47,7 @@ bash scripts/01A_make_young_feral_fastq.sh
 bash scripts/01B_make_young_managed_fastq.sh
 bash scripts/01C_make_batlow_feral_fastq.sh
 bash scripts/01D_make_batlow_managed_fastq.sh
+```
 
 ### 3. Mapping with BWA and samtools using SLURM arrays
 Each array task maps one genotype FASTQ:
@@ -58,10 +59,12 @@ Each array task maps one genotype FASTQ:
 •	copy BAM/BAI back to $BASE/map/<group>/
 
 Submit mapping jobs:
+```
 sbatch scripts/02A_map_young_feral_array.sbatch
 sbatch scripts/02B_map_young_managed_array.sbatch
 sbatch scripts/02C_map_batlow_feral_array.sbatch
 sbatch scripts/02D_map_batlow_managed_array.sbatch
+```
 
 ### 4. Generate sync files
 
