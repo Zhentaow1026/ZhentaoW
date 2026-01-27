@@ -2,7 +2,7 @@
 # Run in PowerShell:
 # Rscript .\adonis_minimal.R "C:\...\distance_matrix_cailliez.csv"
 
-# ---- force user library path on Windows ----
+# path need to change ?
 user_lib <- file.path(Sys.getenv("USERPROFILE"), "Documents", "R", "win-library", "4.5")
 if (dir.exists(user_lib)) {
   .libPaths(c(user_lib, .libPaths()))
@@ -22,7 +22,7 @@ d <- as.matrix(d)
 mode(d) <- "numeric"
 diag(d) <- 0
 
-# 2) build metadata from your rule (P1..P46)
+# 2) build metadata P1..P46
 ids <- rownames(d)
 p <- as.integer(sub("^P", "", ids))
 
@@ -32,7 +32,7 @@ metadata <- data.frame(
   row.names = ids
 )
 
-# 3) fix negative values (adonis2 can't accept negatives)
+# 3) remove negative values, adonis2 can't accept negatives
 d[d < 0] <- 0
 dist_eucl <- as.dist(d)
 

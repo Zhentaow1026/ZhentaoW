@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# assume run from repo root (popoolation2_project)
 SYNC="sync/young_F_vs_M_2pop1.sync"
 
 OUTDIR="results/coverage"

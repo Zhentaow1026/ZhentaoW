@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# assume run from repo root (popoolation2_project)
 SYNC="sync/batlow_F_vs_M_2pop1.sync"
 
 OUTDIR="results/coverage"
@@ -11,7 +10,7 @@ COV_TSV="${OUTDIR}/${OUT_PREFIX}.coverage.tsv"
 mkdir -p "$OUTDIR"
 [[ -s "$SYNC" ]] || { echo "Missing/empty SYNC: $SYNC" >&2; exit 1; }
 
-# from sync col4/5 (A:T:C:G:N:del) calculate coverage = A+T+C+G
+# from sync calculate coverage = A+T+C+G
 awk -F'\t' 'BEGIN{OFS="\t"}
 {
   split($4,a,":"); c1=a[1]+a[2]+a[3]+a[4];

@@ -28,11 +28,11 @@ fi
 SCRATCH="$SCR/young_2pop_sync_$SLURM_JOB_ID"
 mkdir -p "$SCRATCH"
 
-# 1) collect BAM list
+# get BAM list
 mapfile -t FERAL_BAMS   < <(ls -1 "$MAPDIR/young_feral/YoungBF"*.bam   2>/dev/null | sort -V)
 mapfile -t MANAGED_BAMS < <(ls -1 "$MAPDIR/young_managed/YoungBM"*.bam 2>/dev/null | sort -V)
 
-# 2) check
+# check
 [[ ${#FERAL_BAMS[@]} -gt 0 ]]   || { echo "No feral BAMs matched: $MAPDIR/young_feral/YoungBF*.bam" >&2; exit 1; }
 [[ ${#MANAGED_BAMS[@]} -gt 0 ]] || { echo "No managed BAMs matched: $MAPDIR/young_managed/YoungBM*.bam" >&2; exit 1; }
 
@@ -47,7 +47,7 @@ done
 
 [[ -f "$REF" ]] || { echo "Missing REF: $REF" >&2; exit 1; }
 
-# 3) merge BAMs within group
+# merge BAMs within group
 FERAL_MERGED="$SCRATCH/young_feral_merged.bam"
 MANAGED_MERGED="$SCRATCH/young_managed_merged.bam"
 
@@ -59,7 +59,7 @@ echo "[2/4] Merging managed -> $MANAGED_MERGED"
 samtools merge -@ "$SLURM_CPUS_PER_TASK" -f "$MANAGED_MERGED" "${MANAGED_BAMS[@]}"
 samtools index -@ "$SLURM_CPUS_PER_TASK" "$MANAGED_MERGED"
 
-# 4) mpileup + mpileup2sync------2-pop sync
+# mpileup + mpileup2sync------2-pop sync
 MPI="$SCRATCH/young_F_vs_M_2pop1.mpileup"
 SYNC_OUT="$SCRATCH/young_F_vs_M_2pop1.sync"
 FINAL_SYNC="$OUTDIR/young_F_vs_M_2pop1.sync"

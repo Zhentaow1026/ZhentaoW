@@ -28,7 +28,7 @@ fi
 SCRATCH="$SCR/batlow_2pop_sync_$SLURM_JOB_ID"
 mkdir -p "$SCRATCH"
 
-# -------- 1) input BAM list (feral + managed) --------
+# input BAM list (feral + managed)
 # feral: exclude BF1 and BF12
 FERAL_BAMS=(
   "$MAPDIR/batlow_feral/BatlowBF2.bam"
@@ -45,7 +45,7 @@ FERAL_BAMS=(
   "$MAPDIR/batlow_feral/BatlowBF14.bam"
 )
 
-# managed: keep BM1 and BM12 (include them)
+# managed
 MANAGED_BAMS=(
   "$MAPDIR/batlow_managed/BatlowBM1.bam"
   "$MAPDIR/batlow_managed/BatlowBM2.bam"
@@ -63,7 +63,7 @@ MANAGED_BAMS=(
   "$MAPDIR/batlow_managed/BatlowBM14.bam"
 )
 
-# -------- 2) checks --------
+# check
 [[ -f "$REF" ]] || { echo "Missing REF: $REF" >&2; exit 1; }
 [[ ${#FERAL_BAMS[@]} -gt 0 ]] || { echo "No feral BAMs listed" >&2; exit 1; }
 [[ ${#MANAGED_BAMS[@]} -gt 0 ]] || { echo "No managed BAMs listed" >&2; exit 1; }
@@ -73,7 +73,7 @@ for b in "${FERAL_BAMS[@]}" "${MANAGED_BAMS[@]}"; do
   [[ -f "$b.bai" ]] || { echo "Missing BAI: $b.bai" >&2; exit 1; }
 done
 
-# -------- 3) merge BAMs within group --------
+# merge BAMs within group
 FERAL_MERGED="$SCRATCH/batlow_feral_merged.bam"
 MANAGED_MERGED="$SCRATCH/batlow_managed_merged.bam"
 
@@ -85,7 +85,7 @@ echo "[2/4] Merging managed BAMs -> $MANAGED_MERGED"
 samtools merge -@ "$SLURM_CPUS_PER_TASK" -f "$MANAGED_MERGED" "${MANAGED_BAMS[@]}"
 samtools index -@ "$SLURM_CPUS_PER_TASK" "$MANAGED_MERGED"
 
-# -------- 4) mpileup + mpileup2sync (2-pop sync) --------
+# mpileup + mpileup2sync (2-pop sync) 
 MPI="$SCRATCH/batlow_F_vs_M_2pop1.mpileup"
 SYNC_OUT="$SCRATCH/batlow_F_vs_M_2pop1.sync"
 FINAL_SYNC="$OUTDIR/batlow_F_vs_M_2pop1.sync"

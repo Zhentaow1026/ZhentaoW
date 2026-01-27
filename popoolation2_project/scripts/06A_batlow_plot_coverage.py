@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-# assume run from repo root (popoolation2_project)
+# run from repo root
 outdir = "results/coverage"
 prefix = "batlow_F_vs_M_2pop1"
 tsv = os.path.join(outdir, f"{prefix}.coverage.tsv")

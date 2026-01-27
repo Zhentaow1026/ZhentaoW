@@ -11,7 +11,7 @@ bams <- bams[nzchar(bams)]
 # pool name get from BAM file
 pool <- sub("\\.bam$", "", basename(bams))
 
-# Parse region from prefix: Young* vs Batlow*
+# Parse region from prefix: Young vs Batlow
 region <- ifelse(grepl("^Young", pool), "Young",
                  ifelse(grepl("^Batlow", pool), "Batlow", NA))
 

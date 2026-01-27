@@ -1,7 +1,7 @@
 library(poolfstat)
 library(ade4)
 
-# It has not been uploaded to GitHub！！！
+# It has not been uploaded to GitHub！
 sync_file <- "sync/all_regions1.sync"
 
 # infer pool count

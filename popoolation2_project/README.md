@@ -1,30 +1,12 @@
 # population2_project
 
-PoPoolation2-based pooled sequencing analysis pipeline.
-
-This project processes pooled FASTQ data from four groups and performs:
-
-mapping → mpileup → sync generation
-
-population distance (FST + PERMANOVA)
-
-allele frequency difference & selection statistics
-
 ## Sample groups
 
 Samples are divided into four groups:
-
-young_feral
-
-young_managed
-
-batlow_feral
-
-batlow_managed
-
-## Overall workflow
-
-总结下
+- young_feral
+- young_managed
+- batlow_feral
+- batlow_managed
 
 ## Part 1 — FASTQ to multi-population sync
 
@@ -70,6 +52,7 @@ sbatch scripts/02D_map_batlow_managed_array.sbatch
 ### 4. Generate sync files
 
 #### 4.1 Young populations sync
+Run:
 ```
 sbatch scripts/03A_make_sync_young_all.sbatch
 ```
@@ -81,6 +64,7 @@ sync/young_all.sync
 
 #### 4.2 Batlow populations sync (with exclusions)
 > drop two samples, BF1 and BF12
+Run:
 ```
 sbatch scripts/03A_make_sync_young_all.sbatch
 ```
@@ -99,7 +83,12 @@ meta/all_regions1_bams_order.txt
 ```
 
 Final order in all_regions1.sync:
-young_feral → young_managed → batlow_feral(excludes BF1 and BF12) → batlow_managed
+- young_feral
+- young_managed
+- batlow_feral(excludes BF1 and BF12) 
+- batlow_managed
+
+Run:
 ```
 sbatch scripts/03C_make_sync_all_regions.sbatch
 ```
@@ -142,9 +131,7 @@ Rscript scripts/R/04B_export_distance_matrix.R
 ```
 
 ### 04C PERMANOVA (adonis2 analysis)
-# PERMANOVA (adonis2) analysis of genetic distance
-
-This repository contains an R workflow to test the effects of **region** and **management status** (feral vs managed) on genetic distance using **PERMANOVA** (`adonis2` in the `vegan` package).
+This repository contains an R workflow to test the effects of **region** and **management status (feral vs managed)** on genetic distance using **PERMANOVA** (`adonis2` in the `vegan` package).
 
 Input:
 - `results/distance_matrix_cailliez.csv`  
@@ -239,7 +226,7 @@ bash scripts/06A_cov_from_sync_batlow.sh
 - The script reports:
   - Minimum, mean, and maximum coverage
   - Coverage percentiles
-  - Suggested `--max-coverage` threshold
+  - Suggested `max_coverage` threshold
 
 Step 2: Plot coverage histograms
 - Generates coverage distribution plots for each population
@@ -311,7 +298,7 @@ bash scripts/06B_cov_from_sync_young.sh
 - The script reports:
   - Minimum, mean, and maximum coverage
   - Coverage percentiles
-  - Suggested `--max-coverage` threshold
+  - Suggested `max_coverage` threshold
 
 Step 2: Plot coverage histograms
 - Generates coverage distribution plots for each population
