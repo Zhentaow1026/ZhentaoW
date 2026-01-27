@@ -51,12 +51,13 @@ bash scripts/01D_make_batlow_managed_fastq.sh
 
 ### 3. Mapping with BWA and samtools using SLURM arrays
 Each array task maps one genotype FASTQ:
-•	bwa aln -> .sai
-•	bwa samse -> .sam
-•	samtools view -q 20 filter
-•	samtools sort -> .bam
-•	samtools index -> .bam.bai
-•	copy BAM/BAI back to $BASE/map/<group>/
+- `bwa aln` → `.sai`
+- `bwa samse` → `.sam`
+- `samtools view -q 20` filter
+- `samtools sort` → `.bam`
+- `samtools index` → `.bam.bai`
+- copy `BAM/BAI` back to `$BASE/map/<group>/`
+
 
 Submit mapping jobs:
 ```
@@ -69,30 +70,76 @@ sbatch scripts/02D_map_batlow_managed_array.sbatch
 ### 4. Generate sync files
 
 #### 4.1 Young populations sync
+```
 sbatch scripts/03A_make_sync_young_all.sbatch
+```
 
-Output: sync/young_all.sync
+Output: 
+```
+sync/young_all.sync
+```
 
 #### 4.2 Batlow populations sync (with exclusions)
 > drop two samples, BF1 and BF12
-
+```
 sbatch scripts/03A_make_sync_young_all.sbatch
+```
 
-Output: sync/young_all.sync
+Output: 
+```
+sync/young_all.sync
+```
 
 #### 4.3 All regions combined sync
-> The order of BAMs passed to samtools mpileup defines the population order in the .sync file.
-Defined by:
+The order of BAMs passed to samtools mpileup defines the population order in the .sync file.
+
+Defined by: 
+```
 meta/all_regions1_bams_order.txt
+```
 
 Final order in all_regions1.sync:
 young_feral → young_managed → batlow_feral(excludes BF1 and BF12) → batlow_managed
+```
+sbatch scripts/03C_make_sync_all_regions.sbatch
+```
+Output:
+```
+sync/batlow_exclF1_F12_keepM1_M12.sync
+```
 
-## Part 2-Distance matrices and PERMANOVA
+## Part 2- Distance matrices and PERMANOVA
 
 ### 04A Create metadata table
+Input:
+- `meta/all_regions1_bams_order.txt`
+
+Output:
+- `results/pool_metadata_all_regions1.csv`
+
+Run:
+```bash
+Rscript scripts/R/04A_make_metadata_all_regions1_from_poolname.R
+```
 
 ### 04B Compute FST distance matrices
+Input:
+- `sync/all_regions1.sync（）`
+
+It has not been uploaded to GitHub, but it can be generated through: 
+```
+sbatch scripts/03C_make_sync_all_regions.sbatch
+```
+
+Output:
+- `results/distance_matrix_linearFST.csv`
+- `results/distance_matrix_cailliez.csv`
+
+
+Run:
+```bash
+Rscript scripts/R/04B_export_distance_matrix.R
+```
 
 ### 04C PERMANOVA (adonis2 analysis)
 
