@@ -1,0 +1,34 @@
+cat > 06B_young_plot_coverage.py <<'EOF'
+import numpy as np
+import matplotlib.pyplot as plt
+
+tsv = "young_F_vs_M_2pop1.coverage.tsv"
+prefix = "young_F_vs_M_2pop1"
+
+cov = np.loadtxt(tsv)
+c1 = cov[:,0]
+c2 = cov[:,1]
+
+plt.figure()
+plt.hist(c1, bins=200)
+plt.yscale("log")
+plt.xlabel("Coverage")
+plt.ylabel("Number of sites")
+plt.title("Coverage distribution - pop1 (young)")
+plt.savefig(f"{prefix}.pop1.coverage.hist.png", dpi=200)
+
+plt.figure()
+plt.hist(c2, bins=200)
+plt.yscale("log")
+plt.xlabel("Coverage")
+plt.ylabel("Number of sites")
+plt.title("Coverage distribution - pop2 (young)")
+plt.savefig(f"{prefix}.pop2.coverage.hist.png", dpi=200)
+
+print("Saved:")
+print(f"{prefix}.pop1.coverage.hist.png")
+print(f"{prefix}.pop2.coverage.hist.png")
+EOF
+
+#how to run
+python 06B_young_plot_coverage.py

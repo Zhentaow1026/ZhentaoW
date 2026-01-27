@@ -1,0 +1,33 @@
+cat > 06A_plot_coverage.py <<'EOF'
+import numpy as np
+import matplotlib.pyplot as plt
+
+tsv = "batlow_F_vs_M_2pop1.coverage.tsv"
+prefix = "batlow_F_vs_M_2pop1"
+
+cov = np.loadtxt(tsv)
+c1 = cov[:,0]
+c2 = cov[:,1]
+
+# pop1
+plt.figure()
+plt.hist(c1, bins=200)
+plt.yscale("log")
+plt.xlabel("Coverage")
+plt.ylabel("Number of sites")
+plt.title("Coverage distribution - pop1")
+plt.savefig(f"{prefix}.pop1.coverage.hist.png", dpi=200)
+
+# pop2
+plt.figure()
+plt.hist(c2, bins=200)
+plt.yscale("log")
+plt.xlabel("Coverage")
+plt.ylabel("Number of sites")
+plt.title("Coverage distribution - pop2")
+plt.savefig(f"{prefix}.pop2.coverage.hist.png", dpi=200)
+
+print("Saved:")
+print(f"{prefix}.pop1.coverage.hist.png")
+print(f"{prefix}.pop2.coverage.hist.png")
+EOF
