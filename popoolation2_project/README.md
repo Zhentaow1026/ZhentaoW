@@ -1,5 +1,8 @@
 # population2_project
 
+## Explain
+Last time we discussed downloading the distance matrix CSV file to my computer for R analysis. This is mainly covered in Part 2 – Distance matrices and PERMANOVA. You can scroll down in the README to find Part 2. My newly conducted Two-population PoPoolation2 analysis is in Part 3.
+
 ## Sample groups
 
 Samples are divided into four groups:
