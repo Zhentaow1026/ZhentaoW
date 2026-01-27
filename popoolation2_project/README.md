@@ -142,6 +142,39 @@ Rscript scripts/R/04B_export_distance_matrix.R
 ```
 
 ### 04C PERMANOVA (adonis2 analysis)
+# PERMANOVA (adonis2) analysis of genetic distance
+
+This repository contains an R workflow to test the effects of **region** and **management status** (feral vs managed) on genetic distance using **PERMANOVA** (`adonis2` in the `vegan` package).
+
+Input:
+- `results/distance_matrix_cailliez.csv`  
+  - Rows and columns are sample IDs: `P1` to `P46`
+  - Distances were corrected using the **Cailliez** method
+- `results/pool_metadata_all_regions1.csv`
+
+Sample group definition:
+- Young (feral): P1–P10  
+- Young (managed): P11–P20  
+- Batlow (feral): P21–P32  
+- Batlow (managed): P33–P46
+
+Models:
+- Interaction model:
+  ```r
+  adonis2(dist ~ region * feral, by = "margin")
+- Additive model (used when interaction is not significant):
+  ```r
+  adonis2(dist ~ region + feral, by = "margin")
+
+Handling of negative distances:
+Although Cailliez correction should produce non-negative distances, small or moderate negative values were still present in the matrix.
+To satisfy adonis2 requirements, all negative values were truncated to zero before analysis.
+
+Run (Windows PowerShell):
+```
+cd scripts\R
+Rscript .\adonis_workflow.R "..\..\results\distance_matrix_cailliez.csv"
+```
 
 ## Part 3— Two-population PoPoolation2 analysis
 
