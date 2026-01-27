@@ -22,3 +22,15 @@ cat("Tail N=", length(tail), " (", round(length(tail)/length(fst),4), "of all)\n
 
 # 如何拷贝回电脑桌面
 scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/young_F_vs_M_2pop1.pop2.coverage.hist.png C:\Users\Tony\Downloads\0107
+
+scp u8021786@wright:/mnt/data/wright/home/u8021786/honeybee_genetics/data/NMDS_all_pools_ggplot.pdf C:\Users\Tony\Downloads\0107
+
+太大了
+scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/results/figures/Fig3b_Manhattan_Young.pdf C:\Users\Tony\Downloads\0107
+
+scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/results/figures/Fig4_Gap_boxplot_log10.pdf C:\Users\Tony\Downloads\0107
+
+scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/results/figures/Fig5_Outlier_chr_enrichment_top12.pdf C:\Users\Tony\Downloads\0107
+
+scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/results/figures/Fig4_gap_logscale_boxplot.pdf C:\Users\Tony\Downloads\0107
+
