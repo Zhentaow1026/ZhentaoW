@@ -1,0 +1,354 @@
+#!/bin/bash
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+OUT=$BASE/young_pools.tsv
+
+# ===== 你可以在这里改默认 poolsize =====
+# 10 只二倍体蜜蜂（工蜂） -> haploid poolsize = 20
+DEFAULT_POOLSIZE=20
+
+cat > "$OUT" <<EOF
+pool	group	poolsize
+YoungBF1	feral	$DEFAULT_POOLSIZE
+YoungBF2	feral	$DEFAULT_POOLSIZE
+YoungBF3	feral	$DEFAULT_POOLSIZE
+YoungBF4	feral	$DEFAULT_POOLSIZE
+YoungBF5	feral	$DEFAULT_POOLSIZE
+YoungBF6	feral	$DEFAULT_POOLSIZE
+YoungBF7	feral	$DEFAULT_POOLSIZE
+YoungBF8	feral	$DEFAULT_POOLSIZE
+YoungBF9	feral	$DEFAULT_POOLSIZE
+YoungBF10	feral	$DEFAULT_POOLSIZE
+YoungBM1	managed	$DEFAULT_POOLSIZE
+YoungBM2	managed	$DEFAULT_POOLSIZE
+YoungBM3	managed	$DEFAULT_POOLSIZE
+YoungBM4	managed	$DEFAULT_POOLSIZE
+YoungBM5	managed	$DEFAULT_POOLSIZE
+YoungBM6	managed	$DEFAULT_POOLSIZE
+YoungBM7	managed	$DEFAULT_POOLSIZE
+YoungBM8	managed	$DEFAULT_POOLSIZE
+YoungBM9	managed	$DEFAULT_POOLSIZE
+YoungBM10	managed	$DEFAULT_POOLSIZE
+EOF
+
+echo "Wrote: $OUT"
+column -t "$OUT" | head
+
+
+
+
+
+----
+
+library(poolfstat)
+
+############################
+# 0) Paths (按你项目默认目录)
+############################
+BASE <- "/mnt/data/wright/home/u8021786/popoolation2_project"
+sync_file <- file.path(BASE, "sync/young_all.sync")
+meta_file <- file.path(BASE, "young_pools.tsv")
+
+out_dir <- file.path(BASE, "perm_young_perlocus")
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+############################
+# 1) Read metadata (自动读 poolsize + group)
+############################
+meta <- read.table(meta_file, header=TRUE, sep="\t", stringsAsFactors=FALSE)
+stopifnot(all(c("pool","group","poolsize") %in% colnames(meta)))
+
+# 重要：meta 的顺序必须和 sync 里 pool 的顺序一致（你之前就是这么建的）
+poolsizes <- meta$poolsize
+poolnames <- meta$pool
+labels0   <- meta$group  # "feral" / "managed"
+
+nF <- sum(labels0 == "feral")
+nM <- sum(labels0 == "managed")
+stopifnot(nF > 1, nM > 1, nF + nM == length(labels0))
+
+############################
+# 2) sync -> pooldata (严格按教程函数)
+############################
+pd <- popsync2pooldata(
+  sync.file = sync_file,
+  poolsizes = poolsizes,
+  poolnames = poolnames,
+  min.rc = 4,
+  min.cov.per.pool = 10,
+  max.cov.per.pool = 1000000,
+  min.maf = 0.05,
+  noindel = TRUE,
+  nthreads = 2
+)
+
+############################
+# helper: given a label vector, aggregate into 2 group pools then compute per-locus FST
+############################
+calc_mean_perlocus_fst <- function(pd, labels) {
+  Fidx <- which(labels == "feral")
+  Midx <- which(labels == "managed")
+
+  ref <- pd@refallele.readcount
+  cov <- pd@readcoverage
+
+  refF <- rowSums(ref[, Fidx, drop=FALSE])
+  covF <- rowSums(cov[, Fidx, drop=FALSE])
+  refM <- rowSums(ref[, Midx, drop=FALSE])
+  covM <- rowSums(cov[, Midx, drop=FALSE])
+
+  pd2 <- new("pooldata",
+    npools = 2L,
+    nsnp = pd@nsnp,
+    refallele.readcount = cbind(refF, refM),
+    readcoverage = cbind(covF, covM),
+    snp.info = pd@snp.info,
+    poolsizes = c(sum(pd@poolsizes[Fidx]), sum(pd@poolsizes[Midx])),
+    poolnames = c("feral_agg", "managed_agg")
+  )
+
+  res <- computeFST(pd2, method="Anova", struct=NULL, verbose=FALSE)
+
+  # 老师说的“per locus Fst”就是这里：res$snp.Fstats$FST
+  fst_vec <- res$snp.Fstats$FST
+  mean_fst <- mean(fst_vec, na.rm=TRUE)
+
+  # 顺便也把 poolfstat 默认的 genome-wide ratio-of-sums FST 带出来（便于你对照）
+  overall_fst <- res$FST[1]
+
+  return(list(mean_perlocus=mean_fst, overall=overall_fst))
+}
+
+############################
+# 3) Observed statistic (按真实标签)
+############################
+obs <- calc_mean_perlocus_fst(pd, labels0)
+cat("Observed mean(per-locus FST) =", obs$mean_perlocus, "\n")
+cat("Observed overall (ratio-of-sums) FST =", obs$overall, "\n")
+
+############################
+# 4) Permutation: swap labels on pools (保持 nF/nM 不变)
+############################
+nperm <- 50
+set.seed(1)
+
+null_mean <- numeric(nperm)
+null_overall <- numeric(nperm)
+
+for (i in 1:nperm) {
+  idx <- sample(seq_along(labels0))
+  perm_labels <- rep("managed", length(labels0))
+  perm_labels[idx[1:nF]] <- "feral"
+
+  tmp <- calc_mean_perlocus_fst(pd, perm_labels)
+  null_mean[i] <- tmp$mean_perlocus
+  null_overall[i] <- tmp$overall
+}
+
+# one-sided p-value: P(null >= observed)
+pval_mean <- (sum(null_mean >= obs$mean_perlocus) + 1) / (nperm + 1)
+pval_overall <- (sum(null_overall >= obs$overall) + 1) / (nperm + 1)
+
+cat("Permutation p-value (mean per-locus FST) =", pval_mean, "\n")
+cat("Permutation p-value (overall FST) =", pval_overall, "\n")
+
+############################
+# 5) Write outputs
+############################
+write.table(null_mean,
+            file=file.path(out_dir, "null_mean_perlocus_fst.txt"),
+            row.names=FALSE, col.names=FALSE, quote=FALSE)
+
+write.table(null_overall,
+            file=file.path(out_dir, "null_overall_fst.txt"),
+            row.names=FALSE, col.names=FALSE, quote=FALSE)
+
+summary_file <- file.path(out_dir, "summary.txt")
+writeLines(c(
+  paste0("sync_file\t", sync_file),
+  paste0("meta_file\t", meta_file),
+  paste0("npools\t", pd@npools),
+  paste0("nsnp_used\t", pd@nsnp),
+  paste0("nperm\t", nperm),
+  paste0("obs_mean_perlocus_fst\t", format(obs$mean_perlocus, digits=10)),
+  paste0("pvalue_mean_perlocus_fst\t", format(pval_mean, digits=10)),
+  paste0("obs_overall_fst\t", format(obs$overall, digits=10)),
+  paste0("pvalue_overall_fst\t", format(pval_overall, digits=10)),
+  "filters\tmin.rc=4; min.cov.per.pool=10; max.cov.per.pool=1e6; min.maf=0.05; noindel=TRUE"
+), con=summary_file)
+
+cat("DONE. Outputs in:", out_dir, "\n")
+
+-----
+
+#########新 young开始----------------------------------------------
+###① 先算 max coverage
+
+cd /mnt/data/wright/home/u8021786/popoolation2_project
+
+cat > coverage_from_sync_multipool.sh << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ===== input sync (你刚才用的 young_all.sync) =====
+SYNC="sync/young_all.sync"
+
+OUTDIR="results/coverage"
+OUT_PREFIX="young_all_20pools"
+COV_TSV="${OUTDIR}/${OUT_PREFIX}.coverage.tsv"
+
+# 推荐 max coverage 用哪个分位数：99 或 99.5
+PERC=99
+
+mkdir -p "$OUTDIR"
+[[ -s "$SYNC" ]] || { echo "Missing/empty SYNC: $SYNC" >&2; exit 1; }
+
+echo "[INFO] Input sync: $SYNC"
+echo "[INFO] Output cov:  $COV_TSV"
+echo "[INFO] Percentile for max coverage: p$PERC"
+echo
+
+# ===== 1) 从 sync 计算每个 pool 的 coverage（A+T+C+G） =====
+# sync格式：chr pos ref  pool1  pool2 ... poolN
+# 每个 pool 字段一般是 A:T:C:G:N:del (至少前4个是ATCG)
+awk -F'\t' -v OFS='\t' '
+{
+  # pools 从第4列开始到最后一列
+  for(i=4;i<=NF;i++){
+    split($i,a,":");
+    cov = a[1]+a[2]+a[3]+a[4];
+    printf "%s", cov;
+    if(i<NF) printf OFS; else printf "\n";
+  }
+}' "$SYNC" > "$COV_TSV"
+
+# ===== 2) Python 汇总每个 pool 的分布，并给推荐 max.cov.per.pool =====
+python - <<PY
+import numpy as np, math
+
+cov = np.loadtxt("${COV_TSV}")
+if cov.ndim == 1:
+    cov = cov.reshape(-1, 1)
+
+n_sites, n_pools = cov.shape
+print(f"[INFO] sites: {n_sites}, pools: {n_pools}")
+
+perc = float(${PERC})
+
+def show(j, x):
+    x = x.astype(float)
+    print(f"== Pool{j+1} ==")
+    print("min:", int(np.min(x)), "mean:", round(float(np.mean(x)),1), "max:", int(np.max(x)))
+    for p in [50, 75, 90, 95, 97.5, 99, 99.5]:
+        if p <= 99.5:
+            print(f"p{p}:", round(float(np.percentile(x,p)),1))
+    print()
+
+# 每个 pool 打印统计
+for j in range(n_pools):
+    show(j, cov[:, j])
+
+# 推荐 max.cov.per.pool：所有 pools 的 pPERC 里取最大，再向上取整
+pvals = [np.percentile(cov[:, j], perc) for j in range(n_pools)]
+mc = max(pvals)
+print(f"[SUGGEST] max.cov.per.pool (max of per-pool p{perc}) =", int(math.ceil(mc)))
+
+# 也给一个参考的 min coverage：每 pool p5 的最大值（可选参考）
+p5 = max(np.percentile(cov[:, j], 5) for j in range(n_pools))
+print("[REF] p5 coverage across pools (max of per-pool p5) =", int(math.floor(p5)))
+print("[WROTE]", "${COV_TSV}")
+PY
+EOF
+
+chmod +x coverage_from_sync_multipool.sh
+
+
+####②-------
+
+cd /mnt/data/wright/home/u8021786/popoolation2_project
+mkdir -p perm_young_n1000_max927
+
+cat > young_perm_n1000_max927.R
+
+library(poolfstat)
+
+BASE <- "/mnt/data/wright/home/u8021786/popoolation2_project"
+sync_file <- paste0(BASE, "/sync/young_all.sync")
+out_dir <- paste0(BASE, "/perm_young_n1000_max927")
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+# 20 pools: 10 feral + 10 managed; each pool 10 bees -> haploid poolsize = 20
+poolsizes <- rep(20, 20)
+labels <- c(rep("feral",10), rep("managed",10))
+
+# sync -> pooldata (注意：max coverage 用 927)
+pd <- popsync2pooldata(
+  sync.file = sync_file,
+  poolsizes = poolsizes,
+  min.rc = 4,
+  min.cov.per.pool = 10,
+  max.cov.per.pool = 927,
+  min.maf = 0.05,
+  noindel = TRUE,
+  nthreads = 2
+)
+
+# helper: aggregate 20 pools into 2 group pools based on labels
+make_2pool <- function(pd, labs){
+  Fidx <- which(labs=="feral")  #find all feral
+  Midx <- which(labs=="managed")
+
+  ref <- pd@refallele.readcount   #Extract the reference allele read count matrix(SNP POOL reads of ref allele at SNP)
+  cov <- pd@readcoverage  #Extract ALL coverage
+
+  new("pooldata",
+      npools=2,
+      nsnp=pd@nsnp,
+      refallele.readcount=cbind(rowSums(ref[,Fidx]), rowSums(ref[,Midx])),
+      readcoverage=cbind(rowSums(cov[,Fidx]), rowSums(cov[,Midx])),
+      snp.info=pd@snp.info,
+      poolsizes=c(sum(pd@poolsizes[Fidx]), sum(pd@poolsizes[Midx])),
+      poolnames=c("feral","managed")
+  )
+}
+
+# observed FST
+pd_obs2 <- make_2pool(pd, labels)
+fst_obs2 <- computeFST(pd_obs2, method="Anova", verbose=FALSE)
+obs_fst <- fst_obs2$Fst[1]
+
+# permutation
+set.seed(1)
+nperm <- 1000
+null_fst <- numeric(nperm)
+
+
+
+for(i in 1:nperm){
+  perm_labels <- sample(labels)
+  pd_perm2 <- make_2pool(pd, perm_labels)  #bdat <- transform(... colonies=colonies[perm])
+  null_fst[i] <- computeFST(pd_perm2, method="Anova", verbose=FALSE)$Fst[1]
+}
+
+# one-sided p-value
+pval <- (sum(null_fst >= obs_fst) + 1) / (nperm + 1)
+
+# write outputs
+write.table(null_fst,
+            file = file.path(out_dir, "null_fst.txt"),
+            row.names = FALSE,
+            col.names = FALSE,
+            quote = FALSE)
+
+cat("Observed FST =", obs_fst, "\n")
+cat("Permutation p-value =", pval, "\n")
+cat("Null distribution saved to:", out_dir, "/null_fst.txt\n")
+
+
+
+
+----
+
+优化后脚本
+

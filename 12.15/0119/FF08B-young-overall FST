@@ -1,0 +1,123 @@
+#!/bin/bash
+#SBATCH --job-name=young_overallFST
+#SBATCH --partition=Standard
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
+#SBATCH --time=08:00:00
+#SBATCH --output=slurm_%j_young_overallFST.out
+#SBATCH --error=slurm_%j_young_overallFST.err
+
+set -euo pipefail
+
+BASE="/mnt/data/wright/home/u8021786/popoolation2_project"
+SYNC="$BASE/sync/young_F_vs_M_2pop1.sync"
+OUTDIR="$BASE/results/overall_fst_perm"
+mkdir -p "$OUTDIR"
+
+MINCOV=50
+MAXCOV=7200
+NPERM=999
+SEED=123
+
+OUTTXT="$OUTDIR/young_overallFST_perm_strictBiallelic.txt"
+OUTCSV="$OUTDIR/young_overallFST_perm_distribution_strictBiallelic.csv"
+
+source /opt/conda/etc/profile.d/conda.sh
+conda activate popoolation2
+
+python - <<PY
+import numpy as np, csv
+
+sync_path="${SYNC}"
+mincov=${MINCOV}; maxcov=${MAXCOV}
+nperm=${NPERM}; seed=${SEED}
+out_txt="${OUTTXT}"; out_csv="${OUTCSV}"
+
+rng=np.random.default_rng(seed)
+
+def counts(x):
+    a,t,c,g,*_ = x.split(":")
+    return np.array([int(a),int(t),int(c),int(g)], dtype=np.int64)
+
+# collect per-locus biallelic parameters for permutation
+# n1= the total number of allele reads at a locus in feral
+# k1 = the number of reads supporting the allele
+# p1, p2= allele frequencies
+n1=[]; n2=[]; k1=[]; k2=[]
+total=kept=bial=0
+
+with open(sync_path) as f:
+    for line in f:
+        total += 1
+        s=line.rstrip().split("\t")
+        if len(s)<5: 
+            continue
+
+        p1=counts(s[3])  # feral
+        p2=counts(s[4])  # managed
+
+        cov1=int(p1.sum()); cov2=int(p2.sum())
+        if cov1<mincov or cov2<mincov or cov1>maxcov or cov2>maxcov:
+            continue
+        kept += 1
+
+        comb=p1+p2
+        idx=np.where(comb>0)[0]
+        if idx.size!=2:         # make sure 2
+            continue
+
+        # 
+        iA,iB=idx
+        i1,i2=(iB,iA) if comb[iB]>comb[iA] else (iA,iB)
+
+        n1.append(int(p1[i1]+p1[i2])); n2.append(int(p2[i1]+p2[i2]))
+        k1.append(int(p1[i1]));        k2.append(int(p2[i1]))
+        bial += 1
+
+n1=np.array(n1,float); n2=np.array(n2,float)
+k1=np.array(k1,float); k2=np.array(k2,float)
+
+# tutorial 
+p1=k1/n1; p2=k2/n2
+HS=0.5*(2*p1*(1-p1)+2*p2*(1-p2))
+pbar=(k1+k2)/(n1+n2)
+HT=2*pbar*(1-pbar)
+keep=HT>0
+fst_obs=float(((HT-HS)[keep].sum())/(HT[keep].sum()))
+
+# prepare-permutation fix N , K at locus, reallocate by hypergeometric
+K=(k1+k2).astype(int)
+N=(n1+n2).astype(int)
+n1i=n1.astype(int)
+
+fst_perm=np.empty(nperm,float)
+for i in range(nperm):
+    k1p=rng.hypergeometric(K, N-K, n1i).astype(float)   #apply for space
+    k2p=(K-k1p)
+    p1p=k1p/n1; p2p=k2p/n2
+    HSp=0.5*(2*p1p*(1-p1p)+2*p2p*(1-p2p))
+    pbarp=(k1p+k2p)/(n1+n2)
+    HTp=2*pbarp*(1-pbarp)
+    kp=HTp>0
+    fst_perm[i]=float(((HTp-HSp)[kp].sum())/(HTp[kp].sum()))
+
+ge=int((fst_perm>=fst_obs).sum())
+pval=(ge+1)/(nperm+1)
+
+with open(out_txt,"w") as w:
+    w.write("Young overall FST permutation test (STRICT biallelic)\\n")
+    w.write(f"Coverage filter: min={mincov}, max={maxcov}\\n")
+    w.write(f"Total sync sites: {total}\\n")
+    w.write(f"Sites after coverage filter: {kept}\\n")
+    w.write(f"Strict biallelic SNPs: {bial}\\n")
+    w.write(f"Overall FST: {fst_obs:.6f}\\n")
+    w.write(f"Permutations: {nperm}\\n")
+    w.write(f"P value: {pval:.6f}\\n")
+
+with open(out_csv,"w",newline="") as f:
+    wr=csv.writer(f); wr.writerow(["perm_id","overall_fst_perm"])
+    for i,v in enumerate(fst_perm,1):
+        wr.writerow([i,f"{v:.10f}"])
+
+print("DONE", "FST=", round(fst_obs,6), "p=", round(pval,6))
+PY

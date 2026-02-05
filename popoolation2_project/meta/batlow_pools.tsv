@@ -1,0 +1,36 @@
+cd /mnt/data/wright/home/u8021786/popoolation2_project
+
+cat > batlow_pools.tsv << 'EOF'
+pool	group	poolsize
+Pool1	feral	20
+Pool2	feral	20
+Pool3	feral	20
+Pool4	feral	20
+Pool5	feral	20
+Pool6	feral	20
+Pool7	feral	20
+Pool8	feral	20
+Pool9	feral	20
+Pool10	feral	20
+Pool11	feral	20
+Pool12	feral	20
+Pool13	managed	20
+Pool14	managed	20
+Pool15	managed	20
+Pool16	managed	20
+Pool17	managed	20
+Pool18	managed	20
+Pool19	managed	20
+Pool20	managed	20
+Pool21	managed	20
+Pool22	managed	20
+Pool23	managed	20
+Pool24	managed	20
+Pool25	managed	20
+Pool26	managed	20
+EOF
+
+echo "[OK] Wrote batlow_pools.tsv"
+head -n 5 batlow_pools.tsv
+echo "..."
+tail -n 5 batlow_pools.tsv

@@ -1,0 +1,161 @@
+① 先算max coverage
+
+cat > coverage_batlow_multipool.sh << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ===== input =====
+SYNC="sync/batlow_exclF1_F12_keepM1_M12.sync"
+
+OUTDIR="results/coverage"
+OUT_PREFIX="batlow_exclF1_F12_keepM1_M12"
+COV_TSV="${OUTDIR}/${OUT_PREFIX}.coverage.tsv"
+
+# 用哪个分位数作为 max coverage 建议（99 或 99.5 常用）
+PERC=99
+
+mkdir -p "$OUTDIR"
+[[ -s "$SYNC" ]] || { echo "Missing/empty SYNC: $SYNC" >&2; exit 1; }
+
+echo "[INFO] Input sync: $SYNC"
+echo "[INFO] Output cov:  $COV_TSV"
+echo "[INFO] Percentile for max coverage: p$PERC"
+echo
+
+# ===== 1) 从 sync 计算每个 pool 的 coverage（A+T+C+G） =====
+awk -F'\t' -v OFS='\t' '
+{
+  for(i=4;i<=NF;i++){
+    split($i,a,":");
+    cov = a[1]+a[2]+a[3]+a[4];
+    printf "%s", cov;
+    if(i<NF) printf OFS; else printf "\n";
+  }
+}' "$SYNC" > "$COV_TSV"
+
+# ===== 2) Python 汇总分布并给推荐 max.cov.per.pool =====
+python - <<PY
+import numpy as np, math
+
+cov = np.loadtxt("${COV_TSV}")
+if cov.ndim == 1:
+    cov = cov.reshape(-1, 1)
+
+n_sites, n_pools = cov.shape
+print(f"[INFO] sites: {n_sites}, pools: {n_pools}")
+
+perc = float(${PERC})
+
+def show(j, x):
+    x = x.astype(float)
+    print(f"== Pool{j+1} ==")
+    print("min:", int(np.min(x)), "mean:", round(float(np.mean(x)),1), "max:", int(np.max(x)))
+    for p in [50, 75, 90, 95, 97.5, 99, 99.5]:
+        print(f"p{p}:", round(float(np.percentile(x,p)),1))
+    print()
+
+# 打印每个 pool 的统计（如果太长，你可以后面改成只打印最极端的几个 pool）
+for j in range(n_pools):
+    show(j, cov[:, j])
+
+# 推荐 max.cov.per.pool：所有 pools 的 pPERC 取最大，再向上取整
+pvals = [np.percentile(cov[:, j], perc) for j in range(n_pools)]
+mc = max(pvals)
+print(f"[SUGGEST] max.cov.per.pool (max of per-pool p{perc}) =", int(math.ceil(mc)))
+
+# 参考：p5（低覆盖端）
+p5 = max(np.percentile(cov[:, j], 5) for j in range(n_pools))
+print("[REF] p5 coverage across pools (max of per-pool p5) =", int(math.floor(p5)))
+
+print("[WROTE]", "${COV_TSV}")
+PY
+EOF
+
+chmod +x coverage_batlow_multipool.sh
+
+
+② 
+cd /mnt/data/wright/home/u8021786/popoolation2_project
+
+cat > batlow_perm_n1000_max942.R << 'RSCRIPT'
+library(poolfstat)
+
+BASE <- "/mnt/data/wright/home/u8021786/popoolation2_project"
+sync_file <- paste0(BASE, "/sync/batlow_exclF1_F12_keepM1_M12.sync")
+
+out_dir <- paste0(BASE, "/perm_batlow_n1000_max942")
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+# 26 pools: first 12 feral, next 14 managed; each pool 10 bees -> haploid poolsize = 20
+poolsizes <- rep(20, 26)
+labels <- c(rep("feral", 12), rep("managed", 14))
+
+# sync -> pooldata (max coverage = 942)
+pd <- popsync2pooldata(
+  sync.file = sync_file,
+  poolsizes = poolsizes,
+  min.rc = 4,
+  min.cov.per.pool = 10,
+  max.cov.per.pool = 942,
+  min.maf = 0.05,
+  noindel = TRUE,
+  nthreads = 2
+)
+
+# helper: aggregate pools into 2 group pools based on labels
+make_2pool <- function(pd, labs){
+  Fidx <- which(labs=="feral")
+  Midx <- which(labs=="managed")
+
+  ref <- pd@refallele.readcount
+  cov <- pd@readcoverage
+
+  new("pooldata",
+      npools=2,
+      nsnp=pd@nsnp,
+      refallele.readcount=cbind(rowSums(ref[,Fidx]), rowSums(ref[,Midx])),
+      readcoverage=cbind(rowSums(cov[,Fidx]), rowSums(cov[,Midx])),
+      snp.info=pd@snp.info,
+      poolsizes=c(sum(pd@poolsizes[Fidx]), sum(pd@poolsizes[Midx])),
+      poolnames=c("feral","managed")
+  )
+}
+
+# observed FST
+pd_obs2 <- make_2pool(pd, labels)
+fst_obs2 <- computeFST(pd_obs2, method="Anova", verbose=FALSE)
+obs_fst <- fst_obs2$Fst[1]
+
+# permutation
+set.seed(1)
+nperm <- 1000
+null_fst <- numeric(nperm)
+
+for(i in 1:nperm){
+  perm_labels <- sample(labels)  # preserves 12/14 counts
+  pd_perm2 <- make_2pool(pd, perm_labels)
+  null_fst[i] <- computeFST(pd_perm2, method="Anova", verbose=FALSE)$Fst[1]
+}
+
+# one-sided p-value
+pval <- (sum(null_fst >= obs_fst) + 1) / (nperm + 1)
+
+# write outputs
+write.table(null_fst,
+            file=paste0(out_dir, "/null_fst.txt"),
+            row.names=FALSE, col.names=FALSE, quote=FALSE)
+
+writeLines(c(
+  paste0("sync_file\t", sync_file),
+  paste0("nsnp_used\t", pd@nsnp),
+  paste0("nperm\t", nperm),
+  paste0("obs_fst\t", format(obs_fst, digits=10)),
+  paste0("pvalue\t", format(pval, digits=10)),
+  "filters\tmin.rc=4; min.cov.per.pool=10; max.cov.per.pool=942; min.maf=0.05; noindel=TRUE"
+), con=paste0(out_dir, "/summary.txt"))
+
+cat("DONE\n")
+cat("Observed FST:", obs_fst, "\n")
+cat("Permutation p-value:", pval, "\n")
+cat("Outputs in:", out_dir, "\n")
+RSCRIPT

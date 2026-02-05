@@ -1,0 +1,35 @@
+#!/bin/bash
+set -euo pipefail
+
+BASE=/mnt/data/wright/home/u8021786/popoolation2_project
+OUT=$BASE/young_pools.tsv
+
+haploid poolsize = 20
+DEFAULT_POOLSIZE=20
+
+cat > "$OUT" <<EOF
+pool	group	poolsize
+YoungBF1	feral	$DEFAULT_POOLSIZE
+YoungBF2	feral	$DEFAULT_POOLSIZE
+YoungBF3	feral	$DEFAULT_POOLSIZE
+YoungBF4	feral	$DEFAULT_POOLSIZE
+YoungBF5	feral	$DEFAULT_POOLSIZE
+YoungBF6	feral	$DEFAULT_POOLSIZE
+YoungBF7	feral	$DEFAULT_POOLSIZE
+YoungBF8	feral	$DEFAULT_POOLSIZE
+YoungBF9	feral	$DEFAULT_POOLSIZE
+YoungBF10	feral	$DEFAULT_POOLSIZE
+YoungBM1	managed	$DEFAULT_POOLSIZE
+YoungBM2	managed	$DEFAULT_POOLSIZE
+YoungBM3	managed	$DEFAULT_POOLSIZE
+YoungBM4	managed	$DEFAULT_POOLSIZE
+YoungBM5	managed	$DEFAULT_POOLSIZE
+YoungBM6	managed	$DEFAULT_POOLSIZE
+YoungBM7	managed	$DEFAULT_POOLSIZE
+YoungBM8	managed	$DEFAULT_POOLSIZE
+YoungBM9	managed	$DEFAULT_POOLSIZE
+YoungBM10	managed	$DEFAULT_POOLSIZE
+EOF
+
+echo "Wrote: $OUT"
+column -t "$OUT" | head
