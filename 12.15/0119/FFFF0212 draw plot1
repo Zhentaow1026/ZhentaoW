@@ -1,0 +1,27 @@
+
+----------
+scp u8021786@wright.rsb.anu.edu.au:/mnt/data/wright/home/u8021786/popoolation2_project/perm_two_panel_young_batlow.png C:\Users\Tony\Downloads\0107
+
+png("young_coverage_hist_log.png",1200,800)
+
+①
+hist(log10(cov_nonzero),
+     breaks=200,
+     main="Coverage distribution (Young, log scale)",
+     xlab="log10(Coverage)",
+     col="grey")
+
+dev.off()
+
+png("young_coverage_hist_nozero_zoom.png",1200,800)
+
+②限制上限
+hist(cov_nonzero[cov_nonzero < 1000],
+     breaks=200,
+     main="Coverage distribution (Young, non-zero <1000)",
+     xlab="Coverage",
+     col="grey")
+
+dev.off()
+
+batlow

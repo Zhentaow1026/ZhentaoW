@@ -1,19 +1,16 @@
-cd /mnt/data/wright/home/u8021786/popoolation2_project
-mkdir -p perm_young_n1000_max927
-
-cat > young_perm_n1000_max927.R
-
 library(poolfstat)
 
-BASE <- "/mnt/data/wright/home/u8021786/popoolation2_project"
-sync_file <- paste0(BASE, "/sync/young_all.sync")
-out_dir <- paste0(BASE, "/perm_young_n1000_max927")
+# please check the root
+
+sync_file <- "sync/young_all.sync"
+out_dir <- "results/young_global_FST"
+
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 poolsizes <- rep(20, 20)
 labels <- c(rep("feral",10), rep("managed",10))
 
-# sync -> pooldata
+# sync----pooldata
 pd <- popsync2pooldata(
   sync.file = sync_file,
   poolsizes = poolsizes,
@@ -25,13 +22,14 @@ pd <- popsync2pooldata(
   nthreads = 2
 )
 
-# aggregate 20 pools into 2 group
+# aggregate 20 pools into 2 groups
 make_2pool <- function(pd, labs){
-  Fidx <- which(labs=="feral")  #find all feral
+
+  Fidx <- which(labs=="feral")
   Midx <- which(labs=="managed")
 
-  ref <- pd@refallele.readcount   #Extract the reference allele read count matrix(SNP POOL reads of ref allele at SNP)
-  cov <- pd@readcoverage  #Extract ALL coverage
+  ref <- pd@refallele.readcount
+  cov <- pd@readcoverage
 
   new("pooldata",
       npools=2,
@@ -44,7 +42,7 @@ make_2pool <- function(pd, labs){
   )
 }
 
-# calculate FST
+# observed FST
 pd_obs2 <- make_2pool(pd, labels)
 fst_obs2 <- computeFST(pd_obs2, method="Anova", verbose=FALSE)
 obs_fst <- fst_obs2$Fst[1]
@@ -56,22 +54,19 @@ null_fst <- numeric(nperm)
 
 for(i in 1:nperm){
   perm_labels <- sample(labels)
-  pd_perm2 <- make_2pool(pd, perm_labels)  #bdat <- transform(... colonies=colonies[perm])
+  pd_perm2 <- make_2pool(pd, perm_labels)
   null_fst[i] <- computeFST(pd_perm2, method="Anova", verbose=FALSE)$Fst[1]
 }
 
-# p-value # avoid 0
-pval <- (sum(null_fst >= obs_fst) + 1) / (nperm + 1)
+pval <- (sum(null_fst >= obs_fst) + 1) / (nperm + 1)   #p value
 
-# outputs
+# save results
 write.table(null_fst,
             file = file.path(out_dir, "null_fst.txt"),
             row.names = FALSE,
             col.names = FALSE,
             quote = FALSE)
 
-cat("Observed FST =", obs_fst, "\n")
+cat("Observed global FST =", obs_fst, "\n")
 cat("Permutation p-value =", pval, "\n")
 cat("Null distribution saved to:", out_dir, "/null_fst.txt\n")
-
-

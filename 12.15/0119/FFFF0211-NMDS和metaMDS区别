@@ -1,0 +1,124 @@
+# 基于distance metrix；在meta data中有
+
+#!/usr/bin/env Rscript
+
+library(vegan)
+library(ggplot2)
+
+args <- commandArgs(trailingOnly = TRUE)
+dist_file <- "/mnt/data/wright/home/u8021786/popoolation2_project/results/distance_matrix_cailliez.csv"
+if (length(args) >= 1) dist_file <- args[1]
+
+cat("Reading distance matrix:", dist_file, "\n")
+
+# 1) 读入矩阵 -------------------------------------------------------
+df <- read.csv(dist_file, header = TRUE, check.names = FALSE, row.names = 1)
+mat <- as.matrix(df)
+
+cat("Matrix dim:", dim(mat), "\n")
+
+# 基本检查：行列名一致
+if (!all(rownames(mat) == colnames(mat))) {
+  stop("Row names and column names do not match. Please check the matrix.")
+}
+
+# 强制对称（避免微小不对称导致 isSymmetric 失败）
+mat <- (mat + t(mat)) / 2
+diag(mat) <- 0
+
+# 2) 修正负距离（你这个文件确实有负值） -----------------------------
+off <- mat[upper.tri(mat)]
+min_off <- min(off, na.rm = TRUE)
+cat("Minimum off-diagonal distance:", min_off, "\n")
+
+if (min_off < 0) {
+  shift <- -min_off
+  cat("Found negative distances. Shifting all distances by:", shift, "\n")
+  mat <- mat + shift
+  diag(mat) <- 0
+}
+
+# 最后再确保没有负值
+mat[mat < 0] <- 0
+
+d <- as.dist(mat)
+
+# 3) metaMDS --------------------------------------------------------
+set.seed(123)
+cat("Running metaMDS...\n")
+res <- metaMDS(d, k = 2, trymax = 200, autotransform = FALSE)
+
+scores <- as.data.frame(scores(res, display = "sites"))
+scores$sample_id <- rownames(scores)
+
+# 4) 分组：P1-P46 ---------------------------------------------------
+# 提取数字部分（P1 -> 1）
+scores$pnum <- as.integer(sub("^P", "", scores$sample_id))
+
+scores$location <- ifelse(scores$pnum >= 1  & scores$pnum <= 20, "Young",
+                   ifelse(scores$pnum >= 21 & scores$pnum <= 46, "Batlow", NA))
+
+scores$status <- ifelse(scores$pnum >= 1  & scores$pnum <= 10, "feral",
+                 ifelse(scores$pnum >= 11 & scores$pnum <= 20, "managed",
+                 ifelse(scores$pnum >= 21 & scores$pnum <= 32, "feral",
+                 ifelse(scores$pnum >= 33 & scores$pnum <= 46, "managed", NA))))
+
+scores$group <- paste(scores$location, scores$status)
+
+cat("Table (location x status):\n")
+print(table(scores$location, scores$status, useNA = "ifany"))
+
+# Young=实心圆，Batlow=空心圆
+shape_values_location <- c(Young = 16, Batlow = 1)
+
+out_dir <- "../../data"
+
+# 保存 NMDS 坐标（以后不用重复跑 NMDS）
+out_scores_csv <- file.path(out_dir, "NMDS_scores_from_distance_matrix_cailliez.csv")
+write.csv(scores, out_scores_csv, row.names = FALSE)
+cat("Saved NMDS scores:", out_scores_csv, "\n")
+
+# 5) 图1：所有 pools（status颜色 + location形状） -------------------
+p_all <- ggplot(scores, aes(NMDS1, NMDS2, color = status, shape = location)) +
+  geom_point(size = 3) +
+  scale_shape_manual(values = shape_values_location) +
+  labs(title = "NMDS of all pools (Cailliez distance)",
+       color = "Status", shape = "Location") +
+  theme_bw()
+
+ggsave(file.path(out_dir, "NMDS_all_pools_ggplot.pdf"), p_all, width = 6, height = 5)
+
+# 6) 图2：feral vs feral（只看 feral，Young vs Batlow） -------------
+scores_feral <- scores[scores$status == "feral", ]
+p_feral <- ggplot(scores_feral, aes(NMDS1, NMDS2, color = location, shape = location)) +
+  geom_point(size = 3) +
+  scale_shape_manual(values = shape_values_location) +
+  labs(title = "NMDS of feral pools only (Young vs Batlow)",
+       color = "Location", shape = "Location") +
+  theme_bw()
+
+ggsave(file.path(out_dir, "NMDS_feral_only_ggplot.pdf"), p_feral, width = 6, height = 5)
+
+# 7) 图3：Batlow 内部 feral vs managed --------------------------------
+scores_batlow <- scores[scores$location == "Batlow", ]
+p_batlow <- ggplot(scores_batlow, aes(NMDS1, NMDS2, color = status, shape = location)) +
+  geom_point(size = 3) +
+  scale_shape_manual(values = shape_values_location) +
+  labs(title = "NMDS of Batlow pools: feral vs managed",
+       color = "Status", shape = "Location") +
+  theme_bw()
+
+ggsave(file.path(out_dir, "NMDS_batlow_feral_vs_managed_ggplot.pdf"), p_batlow, width = 6, height = 5)
+
+# 8) 图4：Young 内部 feral vs managed ---------------------------------
+scores_young <- scores[scores$location == "Young", ]
+p_young <- ggplot(scores_young, aes(NMDS1, NMDS2, color = status, shape = location)) +
+  geom_point(size = 3) +
+  scale_shape_manual(values = shape_values_location) +
+  labs(title = "NMDS of Young pools: feral vs managed",
+       color = "Status", shape = "Location") +
+  theme_bw()
+
+ggsave(file.path(out_dir, "NMDS_young_feral_vs_managed_ggplot.pdf"), p_young, width = 6, height = 5)
+
+cat("All done.\n")

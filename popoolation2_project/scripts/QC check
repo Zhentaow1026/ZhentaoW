@@ -1,0 +1,43 @@
+# For each pool column, depth is computed as A+C+G+T.
+
+# We report per-pool depth summaries and suggest max.cov.per.pool as the maximum 99th percentile across pools.
+
+python - <<'PY'
+import numpy as np
+
+SYNC = "/mnt/data/wright/home/u8021786/popoolation2_project/sync/young_all.sync"
+# SYNC = "/mnt/data/wright/home/u8021786/popoolation2_project/sync/batlow_exclF1_F12_keepM1_M12.sync"
+
+p_list = [95, 99, 99.5]
+
+# 逐行读取，避免占太多内存
+depths = []  # list of arrays, each array is depths for all pools at one SNP
+with open(SYNC) as f:
+    for line in f:
+        if not line.strip(): 
+            continue
+        parts = line.rstrip("\n").split("\t")
+        pool_cols = parts[3:]  # from 4th column
+        d = []
+        for col in pool_cols:
+            a,c,g,t,*_ = col.split(":")
+            d.append(int(a)+int(c)+int(g)+int(t))
+        depths.append(d)
+
+D = np.array(depths)  # shape: nsnp x npool
+nsnp, npool = D.shape
+print("SYNC:", SYNC)
+print("nsnp:", nsnp, "npool:", npool)
+
+p99_all = []
+for j in range(npool):
+    x = D[:, j]
+    print(f"\nPool{j+1}: min={x.min()} mean={x.mean():.1f} max={x.max()}")
+    for p in p_list:
+        val = np.percentile(x, p)
+        print(f"  p{p}={val:.1f}")
+    p99_all.append(np.percentile(x, 99))
+
+suggest = int(np.ceil(max(p99_all)))
+print("\nSuggested max.cov.per.pool (max of per-pool 99th percentiles):", suggest)
+PY
