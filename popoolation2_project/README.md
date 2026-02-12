@@ -11,6 +11,7 @@ Download it from OneDrive and place it into:`sync/young_all.sync`
 ### Run analysis (Young)
 ```bash
 Rscript scripts/R/08A_Young_global_FST.R
+```
 
 ### Required input (batlow)
 `sync/batlow_exclF1_F12_keepM1_M12.sync`
@@ -19,7 +20,7 @@ Download it from OneDrive and place it into:`sync/batlow_exclF1_F12_keepM1_M12.s
 ### Run analysis (batlow)
 ```bash
 Rscript scripts/R/08B_Batlow_global_FST.R
-
+```
 --------------------------------------------------------------------------------------
 February 5 update: The scripts for global FST and assessing statistical significance are in
 `scripts/08A_Young_global_FST` and `scripts/08B_Batlow_global_FST`.
