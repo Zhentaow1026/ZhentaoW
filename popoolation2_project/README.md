@@ -2,7 +2,7 @@
 
 ## Explain
 February 12 update: This analysis estimates the global FST between feral and managed populations in the Young/Batlow region and evaluates significance using permutation (n = 1000). The scripts are in
-`scripts/R/08A_Young_global_FST` and `scripts/R/08B_Batlow_global_FST`.
+`scripts/R/08A_Young_global_FST.R` and `scripts/R/08B_Batlow_global_FST.R`.
 
 ### Required input (Young)
 `sync/young_all.sync`
@@ -10,15 +10,15 @@ Download it from OneDrive and place it into:`sync/young_all.sync`
 
 ### Run analysis (Young)
 ```bash
-Rscript scripts/young/08A_Young_global_FST.R
+Rscript scripts/R/08A_Young_global_FST.R
 
 ### Required input (batlow)
-`sync/young_all.sync`
+`sync/batlow_exclF1_F12_keepM1_M12.sync`
 Download it from OneDrive and place it into:`sync/batlow_exclF1_F12_keepM1_M12.sync`
 
 ### Run analysis (batlow)
 ```bash
-Rscript scripts/batlow/08B_Batlow_global_FST.R
+Rscript scripts/R/08B_Batlow_global_FST.R
 
 --------------------------------------------------------------------------------------
 February 5 update: The scripts for global FST and assessing statistical significance are in
