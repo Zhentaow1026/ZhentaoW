@@ -1,8 +1,8 @@
 # population2_project
 
 ## Explain
-February 12 update: This analysis estimates the global FST between feral and managed populations in the Young/Batlow region and evaluates significance using permutation (n = 1000). The scripts are in
-`scripts/R/08A_Young_global_FST.R` and `scripts/R/08B_Batlow_global_FST.R`.
+March 24 update: The new scripts are in
+`scripts/08A-Young gloabl FST` and `scripts/08B-Batlow gloabl FST`. I hope you can help me check it when you have time.
 
 ### Required input (Young)
 `sync/young_all.sync`
