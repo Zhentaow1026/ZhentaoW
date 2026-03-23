@@ -1,7 +1,7 @@
 # population2_project
 
 ## Explain
-March 24 update: The new scripts are in
+New March 24 update: The new scripts are in
 `scripts/08A-Young gloabl FST` and `scripts/08B-Batlow gloabl FST`. I hope you can help me check it when you have time.
 
 ### Required input (Young)
